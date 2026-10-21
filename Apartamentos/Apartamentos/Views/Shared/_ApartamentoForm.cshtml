@@ -1,0 +1,13 @@
+@model ApartamentoForm
+@{ var edit=(bool)(ViewData["Editing"]??false); }
+<form asp-controller="Apartamentos" asp-action="@(edit?"Edit":"Create")" asp-route-id="@(edit?Model.IdApartamento:0)" method="post" class="form-card">
+@Html.AntiForgeryToken()<input asp-for="IdApartamento" type="hidden"/><div asp-validation-summary="All" class="validation"></div>
+<div class="field"><label asp-for="Ubicacion">Ubicación</label><input asp-for="Ubicacion" required/></div>
+<div class="field"><label asp-for="DescripcionDepartamento">Descripción</label><input asp-for="DescripcionDepartamento" required/></div>
+<div class="form-grid"><div class="field"><label asp-for="IdAgua">Servicio de agua</label><select asp-for="IdAgua"><option value="">Sin asignar</option>
+@foreach(Agua a in ViewBag.Aguas){<option value="@a.IdAgua">@a.IdAgua · @a.Titular</option>}
+</select></div>
+<div class="field"><label asp-for="IdLuz">Servicio de luz</label><select asp-for="IdLuz"><option value="">Sin asignar</option>
+@foreach(Luz l in ViewBag.Luces){<option value="@l.IdLuz">@l.IdLuz · @l.Titular</option>}
+</select></div></div>
+<div class="actions"><button class="btn primary">Guardar</button><a class="btn" asp-controller="Apartamentos" asp-action="Index">Cancelar</a></div></form>

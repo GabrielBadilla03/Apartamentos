@@ -1,0 +1,9 @@
+@model IEnumerable<Apartamento>
+@{ViewData["Title"]="Apartamentos";var admin=User.IsInRole("Administrador");}
+<div class="heading"><div><h1>Apartamentos</h1><p>Ubicaciones, servicios y encargados.</p></div>@if(admin){<a asp-action="Create" class="btn primary">Agregar</a>}</div>
+<div class="table-wrap"><table><thead><tr><th>ID</th><th>Ubicación</th><th>Descripción</th><th>Agua</th><th>Luz</th><th>Encargados</th><th>Acciones</th></tr></thead><tbody>
+@foreach(var x in Model){<tr><td>@x.IdApartamento</td><td>@x.Ubicacion</td><td>@x.DescripcionDepartamento</td><td>@x.IdAgua</td><td>@x.IdLuz</td>
+<td>@string.Join(", ",x.Encargados.Select(e=>e.Nombre+" "+e.Apellidos))</td>
+<td><div class="actions">@if(admin){<a asp-action="Edit" asp-route-id="@x.IdApartamento" class="btn small">Editar</a>
+<form method="post" asp-action="Delete" asp-route-id="@x.IdApartamento" onsubmit="return confirm('¿Eliminar apartamento?');">@Html.AntiForgeryToken()<button type="submit" class="btn danger small">Eliminar</button></form>}</div></td></tr>}
+</tbody></table></div>

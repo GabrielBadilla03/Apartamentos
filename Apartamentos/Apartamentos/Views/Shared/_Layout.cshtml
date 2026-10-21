@@ -1,50 +1,25 @@
-﻿<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>@ViewData["Title"] - Apartamentos</title>
-    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
-    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
-    <link rel="stylesheet" href="~/Apartamentos.styles.css" asp-append-version="true" />
-</head>
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>@ViewData["Title"] - Apartamentos</title><link rel="stylesheet" href="~/css/site.css" asp-append-version="true"/></head>
 <body>
-    <header>
-        <nav class="navbar navbar-expand-sm navbar-toggleable-sm navbar-light bg-white border-bottom box-shadow mb-3">
-            <div class="container-fluid">
-                <a class="navbar-brand" asp-area="" asp-controller="Home" asp-action="Index">Apartamentos</a>
-                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target=".navbar-collapse" aria-controls="navbarSupportedContent"
-                        aria-expanded="false" aria-label="Toggle navigation">
-                    <span class="navbar-toggler-icon"></span>
-                </button>
-                <div class="navbar-collapse collapse d-sm-inline-flex justify-content-between">
-                    <ul class="navbar-nav flex-grow-1">
-                        <li class="nav-item">
-                            <a class="nav-link text-dark" asp-area="" asp-controller="Home" asp-action="Index">Home</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link text-dark" asp-area="" asp-controller="Home" asp-action="Privacy">Privacy</a>
-                        </li>
-                    </ul>
-                    <partial name="_LoginPartial" />
-                </div>
-            </div>
-        </nav>
-    </header>
-    <div class="container">
-        <main role="main" class="pb-3">
-            @RenderBody()
-        </main>
-    </div>
-
-    <footer class="border-top footer text-muted">
-        <div class="container">
-            &copy; 2026 - Apartamentos - <a asp-area="" asp-controller="Home" asp-action="Privacy">Privacy</a>
-        </div>
-    </footer>
-    <script src="~/lib/jquery/dist/jquery.min.js"></script>
-    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="~/js/site.js" asp-append-version="true"></script>
-    @await RenderSectionAsync("Scripts", required: false)
-</body>
-</html>
+<header class="nav"><div class="nav-in"><a class="brand" asp-controller="Home" asp-action="Index">Apartamentos</a>
+@if(User.Identity?.IsAuthenticated==true){
+  <a asp-controller="Apartamentos" asp-action="Index">Apartamentos</a>
+  <a asp-controller="Encargados" asp-action="Index">Encargados</a>
+  <a asp-controller="Agua" asp-action="Index">Agua</a>
+  <a asp-controller="Luz" asp-action="Index">Luz</a>
+  <a asp-controller="MontosAgua" asp-action="Index">Montos agua</a>
+  <a asp-controller="MontosLuz" asp-action="Index">Montos luz</a>
+  @if(User.IsInRole("Administrador")){<a asp-controller="Usuarios" asp-action="Index">Usuarios</a>}
+  <span class="username">@User.Identity.Name</span>
+  <form asp-area="Identity" asp-page="/Account/Logout" asp-route-returnUrl="/" method="post"><button class="nav-logout" type="submit">Salir</button></form>
+}else{<a asp-area="Identity" asp-page="/Account/Login">Entrar</a>}
+</div></header>
+<main class="container">
+@if(TempData["Mensaje"] is string ok){<div class="alert success" role="status">@ok</div>}
+@if(TempData["Error"] is string err){<div class="alert error" role="alert">@err</div>}
+@RenderBody()
+</main>
+<footer class="footer">Sistema de administración de apartamentos · SQL Server / ASP.NET Core</footer>
+@await RenderSectionAsync("Scripts",required:false)
+</body></html>

@@ -1,0 +1,12 @@
+@model EncargadoForm
+@{ var edit=(bool)(ViewData["Editing"]??false); }
+<form asp-controller="Encargados" asp-action="@(edit?"Edit":"Create")" asp-route-id="@(edit?Model.IdEncargado:0)" method="post" enctype="multipart/form-data" class="form-card">
+@Html.AntiForgeryToken()<input asp-for="IdEncargado" type="hidden"/><div asp-validation-summary="All" class="validation"></div>
+<div class="form-grid"><div class="field"><label asp-for="Nombre">Nombre</label><input asp-for="Nombre" required/></div>
+<div class="field"><label asp-for="Apellidos">Apellidos</label><input asp-for="Apellidos" required/></div>
+<div class="field"><label asp-for="Cedula">Cédula</label><input asp-for="Cedula" type="number" min="1" required/></div>
+<div class="field"><label asp-for="IdApartamento">Apartamento</label><select asp-for="IdApartamento"><option value="">Sin asignar</option>
+@foreach(Apartamento a in ViewBag.Apartamentos){<option value="@a.IdApartamento">@a.Ubicacion · @a.DescripcionDepartamento</option>}
+</select></div></div>
+<div class="field"><label asp-for="Imagen">Fotografía de cédula (jpg, png, webp; hasta 5MB)</label><input asp-for="Imagen" type="file" accept="image/jpeg,image/png,image/webp"/></div>
+<div class="actions"><button class="btn primary">Guardar</button><a asp-controller="Encargados" asp-action="Index" class="btn">Cancelar</a></div></form>

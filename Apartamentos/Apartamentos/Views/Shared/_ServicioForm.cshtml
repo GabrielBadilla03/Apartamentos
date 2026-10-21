@@ -1,0 +1,16 @@
+@model ServicioForm
+@{ var editing=(bool)(ViewData["Editing"]??false); var controller=(string)(ViewData["Servicio"]??"Agua"); }
+<form asp-controller="@controller" asp-action="@(editing?"Edit":"Create")" asp-route-id="@(editing?Model.Id:0)" method="post" class="form-card">
+    @Html.AntiForgeryToken()
+    <div asp-validation-summary="All" class="validation"></div>
+    <div class="field"><label asp-for="Id">Número de servicio (NIS)</label>
+        <input asp-for="Id" type="number" readonly="@editing" required min="1"/><span asp-validation-for="Id" class="validation"></span></div>
+    <div class="field"><label asp-for="Titular">Titular</label><input asp-for="Titular" required maxlength="160"/><span asp-validation-for="Titular" class="validation"></span></div>
+    <div class="form-grid">
+    <div class="field"><label asp-for="FechaVencimiento">Vencimiento</label><input asp-for="FechaVencimiento" type="date"/></div>
+    <div class="field"><label asp-for="FechaPagar">Fecha de pago</label><input asp-for="FechaPagar" type="date"/></div>
+    <div class="field"><label asp-for="FechaInicioPago">Inicio de pago</label><input asp-for="FechaInicioPago" type="date"/></div>
+    </div>
+    <label class="check"><input asp-for="Pagar" type="checkbox"/> Incluir en consultas y registro de montos</label>
+    <div class="actions"><button type="submit" class="btn primary">Guardar</button><a asp-controller="@controller" asp-action="Index" class="btn">Cancelar</a></div>
+</form>

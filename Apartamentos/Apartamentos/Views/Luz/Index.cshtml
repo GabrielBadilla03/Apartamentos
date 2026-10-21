@@ -1,0 +1,22 @@
+@model IEnumerable<Apartamentos.Models.Luz>
+@{ViewData["Title"]="Servicios de luz";var admin=User.IsInRole("Administrador");}
+<div class="heading"><div><h1>Servicios de luz</h1><p>Consulta de servicios, vencimientos y apartamentos asignados.</p></div>
+@if(admin){<a asp-action="Create" class="btn primary">Agregar</a>}</div>
+<div class="toolbar"><a asp-action="Descargar" class="btn">PDF de servicios</a><a asp-action="Descargar" asp-route-montos="true" class="btn">PDF montos registrados</a>
+@if(admin){
+<form method="post" asp-action="AvanzarPeriodo">@Html.AntiForgeryToken()<button class="btn" type="submit">Avanzar fechas vencidas</button></form>
+<form method="post" asp-action="ActualizarFechas" onsubmit="return confirm('¿Consultar todos los servicios activos en el proveedor?');">@Html.AntiForgeryToken()<button class="btn" type="submit">Actualizar vencimientos externos</button></form>
+}
+</div>
+<div class="table-wrap"><table><thead><tr><th>NIS</th><th>Titular</th><th>Apartamentos</th><th>Vencimiento</th><th>Fecha pago</th><th>Inicio</th><th>Consultar</th><th>Acciones</th></tr></thead><tbody>
+@foreach(var x in Model){<tr><td>@x.IdLuz</td><td>@x.Titular</td>
+<td>@string.Join(", ",x.Apartamentos.Select(a=>a.Ubicacion+" "+a.DescripcionDepartamento))</td>
+<td>@x.FechaVencimiento?.ToString("dd/MM/yyyy")</td><td>@x.FechaPagar?.ToString("dd/MM/yyyy")</td><td>@x.FechaInicioPago?.ToString("dd/MM/yyyy")</td>
+<td>@(x.Pagar?"Sí":"No")</td><td><div class="actions">
+@if(admin){<a asp-action="Edit" asp-route-id="@x.IdLuz" class="btn small">Editar</a>
+<form method="post" asp-action="ConsultarSinRegistrar" asp-route-id="@x.IdLuz">@Html.AntiForgeryToken()<button class="btn small" type="submit">Solo consultar</button></form>
+<form method="post" asp-action="ConsultarRegistrar" asp-route-id="@x.IdLuz" onsubmit="return confirm('Solo consulta y registra importe, NO realiza un pago real. ¿Continuar?');">@Html.AntiForgeryToken()<button class="btn small" type="submit">Consultar / Registrar</button></form>
+<form method="post" asp-action="Delete" asp-route-id="@x.IdLuz" onsubmit="return confirm('¿Eliminar este servicio?');">@Html.AntiForgeryToken()<button class="btn danger small" type="submit">Eliminar</button></form>}
+</div></td></tr>}
+</tbody></table></div>
+@if(!Model.Any()){<p>No hay servicios de luz registrados.</p>}

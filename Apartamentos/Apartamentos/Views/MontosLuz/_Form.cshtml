@@ -1,0 +1,8 @@
+@model MontoForm
+@{var editing=(bool)(ViewData["Editing"]??false);}
+<form asp-controller="MontosLuz" asp-action="@(editing?"Edit":"Create")" asp-route-id="@(editing?Model.IdMonto:0)" method="post" class="form-card">
+@Html.AntiForgeryToken()<input asp-for="IdMonto" type="hidden"/><div asp-validation-summary="All" class="validation"></div>
+<div class="field"><label asp-for="IdServicio">NIS del servicio de luz</label><input asp-for="IdServicio" type="number" min="1" required/></div>
+<div class="form-grid"><div class="field"><label asp-for="Monto">Monto (colones)</label><input asp-for="Monto" type="number" step="0.01" min="0.01" required/></div>
+<div class="field"><label asp-for="FechaRegistro">Fecha de registro</label><input asp-for="FechaRegistro" type="date" required/></div></div>
+<div class="actions"><button class="btn primary">Guardar</button><a asp-controller="MontosLuz" asp-action="Index" class="btn">Cancelar</a></div></form>

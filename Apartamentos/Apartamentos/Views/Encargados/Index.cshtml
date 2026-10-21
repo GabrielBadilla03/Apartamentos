@@ -1,0 +1,14 @@
+@model IEnumerable<Encargado>
+@{ViewData["Title"]="Encargados";var admin=User.IsInRole("Administrador");}
+<div class="heading"><div><h1>Encargados</h1><p>Personas asignadas a los apartamentos.</p></div>@if(admin){<a asp-action="Create" class="btn primary">Agregar</a>}</div>
+<div class="table-wrap"><table><thead><tr><th>ID</th><th>Nombre</th><th>Cédula</th><th>Apartamento</th><th>Documento</th><th>Acciones</th></tr></thead><tbody>
+@foreach(var x in Model){<tr><td>@x.IdEncargado</td><td>@x.Nombre @x.Apellidos</td><td>@x.Cedula</td>
+<td>@x.Apartamento?.Ubicacion @x.Apartamento?.DescripcionDepartamento</td>
+<td>@if(admin && !string.IsNullOrEmpty(x.FotoCedula)){
+@if(x.FotoCedula.StartsWith("https://",StringComparison.OrdinalIgnoreCase)){
+<a href="@x.FotoCedula" target="_blank" rel="noopener noreferrer">Imagen heredada (Firebase)</a>
+}else{<a asp-action="Imagen" asp-route-id="@x.IdEncargado">Ver imagen protegida</a>}}
+</td>
+<td><div class="actions">@if(admin){<a asp-action="Edit" asp-route-id="@x.IdEncargado" class="btn small">Editar</a>
+<form method="post" asp-action="Delete" asp-route-id="@x.IdEncargado" onsubmit="return confirm('¿Eliminar encargado?');">@Html.AntiForgeryToken()<button type="submit" class="btn danger small">Eliminar</button></form>}</div></td></tr>}
+</tbody></table></div>

@@ -1,32 +1,23 @@
-using Apartamentos.Models;
+using Apartamentos.Data;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System.Diagnostics;
-
-namespace Apartamentos.Controllers
+using Microsoft.EntityFrameworkCore;
+namespace Apartamentos.Controllers;
+[Authorize]
+public sealed class HomeController(ApplicationDbContext db):Controller
 {
-    public class HomeController : Controller
+    public async Task<IActionResult> Index(CancellationToken ct)
     {
-        private readonly ILogger<HomeController> _logger;
-
-        public HomeController(ILogger<HomeController> logger)
-        {
-            _logger = logger;
-        }
-
-        public IActionResult Index()
-        {
-            return View();
-        }
-
-        public IActionResult Privacy()
-        {
-            return View();
-        }
-
-        [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
-        public IActionResult Error()
-        {
-            return View(new ErrorViewModel { RequestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier });
-        }
+        ViewBag.Apartamentos=await db.Apartamentos.CountAsync(ct);
+        ViewBag.Encargados=await db.Encargados.CountAsync(ct);
+        ViewBag.Aguas=await db.Aguas.CountAsync(ct);
+        ViewBag.Luces=await db.Luces.CountAsync(ct);
+        ViewBag.ApartamentosListado=await db.Apartamentos.Include(x=>x.Encargados).AsNoTracking().OrderBy(x=>x.Ubicacion).Take(20).ToListAsync(ct);
+        ViewBag.EncargadosListado=await db.Encargados.Include(x=>x.Apartamento).AsNoTracking().OrderBy(x=>x.Nombre).Take(20).ToListAsync(ct);
+        ViewBag.AguasListado=await db.Aguas.AsNoTracking().OrderBy(x=>x.IdAgua).Take(20).ToListAsync(ct);
+        ViewBag.LucesListado=await db.Luces.AsNoTracking().OrderBy(x=>x.IdLuz).Take(20).ToListAsync(ct);
+        return View();
     }
+    [AllowAnonymous]
+    public IActionResult Error()=>View("~/Views/Shared/Error.cshtml");
 }

@@ -1,0 +1,10 @@
+@model IEnumerable<ApplicationUser>
+@{ViewData["Title"]="Usuarios";}
+<div class="heading"><div><h1>Usuarios</h1><p>Administración de cuentas y roles de ASP.NET Core Identity.</p></div><a asp-action="Create" class="btn primary">Nuevo usuario</a></div>
+<div class="table-wrap"><table><thead><tr><th>Nombre</th><th>Correo</th><th>Teléfono</th><th>Estado</th><th>Imagen</th><th>Acciones</th></tr></thead><tbody>
+@foreach(var x in Model){<tr><td>@x.Nombre @x.Apellidos</td><td>@x.Email</td><td>@x.PhoneNumber</td><td>@(x.Activo?"Activo":"Inactivo")</td><td>@if(!string.IsNullOrEmpty(x.RutaImagen)){
+@if(x.RutaImagen.StartsWith("https://",StringComparison.OrdinalIgnoreCase)){<a href="@x.RutaImagen" target="_blank" rel="noopener noreferrer">Imagen heredada</a>}
+else{<a asp-action="Imagen" asp-route-id="@x.Id">Ver foto</a>}}</td>
+<td><div class="actions"><a asp-action="Edit" asp-route-id="@x.Id" class="btn small">Editar / Roles</a><a asp-action="ResetPassword" asp-route-id="@x.Id" class="btn small">Restablecer clave</a>
+<form method="post" asp-action="Delete" asp-route-id="@x.Id" onsubmit="return confirm('¿Eliminar usuario definitivamente?');">@Html.AntiForgeryToken()<button type="submit" class="btn danger small">Eliminar</button></form></div></td></tr>}
+</tbody></table></div>

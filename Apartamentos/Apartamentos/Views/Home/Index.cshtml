@@ -1,8 +1,21 @@
-﻿@{
-    ViewData["Title"] = "Home Page";
-}
-
-<div class="text-center">
-    <h1 class="display-4">Welcome</h1>
-    <p>Learn about <a href="https://learn.microsoft.com/aspnet/core">building Web apps with ASP.NET Core</a>.</p>
-</div>
+@{ViewData["Title"]="Inicio";}
+<h1>Panel de apartamentos</h1><p>Resumen del inventario de apartamentos y servicios.</p>
+<div class="stats"><div><strong>@ViewBag.Apartamentos</strong><span>Apartamentos</span></div><div><strong>@ViewBag.Encargados</strong><span>Encargados</span></div><div><strong>@ViewBag.Aguas</strong><span>Servicios de agua</span></div><div><strong>@ViewBag.Luces</strong><span>Servicios de luz</span></div></div>
+<p class="muted">Las consultas al AyA y al ICE muestran importes y fechas; no realizan pagos bancarios.</p>
+<div class="heading"><h2>Últimos apartamentos por ubicación</h2><a asp-controller="Apartamentos" asp-action="Index" class="btn">Ver todos</a></div>
+<div class="table-wrap"><table><thead><tr><th>Ubicación</th><th>Descripción</th><th>Encargados</th></tr></thead><tbody>
+@foreach(Apartamento a in (IEnumerable<Apartamento>)ViewBag.ApartamentosListado){<tr><td>@a.Ubicacion</td><td>@a.DescripcionDepartamento</td><td>@string.Join(", ",a.Encargados.Select(e=>e.Nombre+" "+e.Apellidos))</td></tr>}
+</tbody></table></div>
+<div class="dashboard-grid">
+<section><div class="heading"><h2>Encargados</h2><a asp-controller="Encargados" asp-action="Index" class="btn small">Ver todos</a></div>
+<div class="table-wrap"><table><thead><tr><th>Nombre</th><th>Apartamento</th></tr></thead><tbody>
+@foreach(Encargado e in (IEnumerable<Encargado>)ViewBag.EncargadosListado){<tr><td>@e.Nombre @e.Apellidos</td><td>@e.Apartamento?.DescripcionDepartamento</td></tr>}
+</tbody></table></div></section>
+<section><div class="heading"><h2>Agua</h2><a asp-controller="Agua" asp-action="Index" class="btn small">Ver todos</a></div>
+<div class="table-wrap"><table><thead><tr><th>NIS</th><th>Vencimiento</th></tr></thead><tbody>
+@foreach(Agua a in (IEnumerable<Agua>)ViewBag.AguasListado){<tr><td>@a.IdAgua</td><td>@a.FechaVencimiento?.ToString("dd/MM/yyyy")</td></tr>}
+</tbody></table></div></section>
+<section><div class="heading"><h2>Luz</h2><a asp-controller="Luz" asp-action="Index" class="btn small">Ver todos</a></div>
+<div class="table-wrap"><table><thead><tr><th>NIS</th><th>Vencimiento</th></tr></thead><tbody>
+@foreach(Luz l in (IEnumerable<Luz>)ViewBag.LucesListado){<tr><td>@l.IdLuz</td><td>@l.FechaVencimiento?.ToString("dd/MM/yyyy")</td></tr>}
+</tbody></table></div></section></div>
