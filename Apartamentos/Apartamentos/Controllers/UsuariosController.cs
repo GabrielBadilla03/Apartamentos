@@ -4,109 +4,162 @@ using Apartamentos.ViewModels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 
 namespace Apartamentos.Controllers;
 
-[Authorize(Roles="Administrador")]
-public sealed class UsuariosController(UserManager<ApplicationUser> users,RoleManager<IdentityRole> roles,IArchivoPrivadoService archivos,ILogger<UsuariosController> logger) : Controller
+// Solo exige una sesion iniciada; no hay comprobaciones de roles.
+[Authorize]
+public sealed class UsuariosController(
+    UserManager<ApplicationUser> users,
+    IArchivoPrivadoService archivos,
+    ILogger<UsuariosController> logger) : Controller
 {
-    public IActionResult Index()=>View(users.Users.OrderBy(x=>x.Nombre).ToList());
-    public IActionResult Create()=>View(new CrearUsuarioForm());
-    [HttpPost,ValidateAntiForgeryToken,RequestSizeLimit(6_000_000)]
-    public async Task<IActionResult> Create(CrearUsuarioForm form,CancellationToken ct)
+    public IActionResult Index() => View(users.Users.OrderBy(x => x.Nombre).ToList());
+
+    public IActionResult Create() => View(new CrearUsuarioForm());
+
+    [HttpPost, ValidateAntiForgeryToken, RequestSizeLimit(6_000_000)]
+    public async Task<IActionResult> Create(CrearUsuarioForm form, CancellationToken ct)
     {
-        if(!await roles.RoleExistsAsync(form.Rol)) ModelState.AddModelError(nameof(form.Rol),"Rol inexistente.");
-        if(!ModelState.IsValid)return View(form);
-        var user=new ApplicationUser{UserName=form.Email,Email=form.Email,EmailConfirmed=true,Nombre=form.Nombre,Apellidos=form.Apellidos,PhoneNumber=form.Telefono,Activo=true};
-        var result=await users.CreateAsync(user,form.Password);
-        if(!result.Succeeded){Errores(result);return View(form);}
-        var roleResult=await users.AddToRoleAsync(user,form.Rol);
-        if(!roleResult.Succeeded)
+        if (!ModelState.IsValid) return View(form);
+        var nuevo = new ApplicationUser
         {
-            // Revert incomplete account creation if no role could be assigned.
-            await users.DeleteAsync(user);
-            Errores(roleResult);
-            return View(form);
-        }
-        if(form.Imagen is {Length:>0})
+            UserName = form.Email.Trim(), Email = form.Email.Trim(), EmailConfirmed = true,
+            Nombre = form.Nombre.Trim(), Apellidos = form.Apellidos.Trim(),
+            PhoneNumber = form.Telefono, Activo = true
+        };
+        var result = await users.CreateAsync(nuevo, form.Password);
+        if (!result.Succeeded) { AddErrors(result); return View(form); }
+
+        if (form.Imagen is { Length: > 0 })
         {
-            try{user.RutaImagen=await archivos.GuardarAsync(form.Imagen,ct);await users.UpdateAsync(user);}
-            catch(InvalidOperationException ex){TempData["Error"]="Usuario creado, pero la imagen fue rechazada: "+ex.Message;}
+            try
+            {
+                nuevo.RutaImagen = await archivos.GuardarAsync(form.Imagen, ct);
+                var saved = await users.UpdateAsync(nuevo);
+                if (!saved.Succeeded) { AddErrors(saved); TempData["Error"] = "Cuenta creada, pero no se guardo la imagen."; }
+            }
+            catch (InvalidOperationException ex)
+            {
+                TempData["Error"] = "Cuenta creada, pero la imagen no se pudo guardar: " + ex.Message;
+            }
         }
+        logger.LogInformation("Usuario {Editor} creo cuenta {Id}", User.Identity?.Name, nuevo.Id);
+        TempData["Mensaje"] = "Cuenta creada correctamente.";
         return RedirectToAction(nameof(Index));
     }
+
     public async Task<IActionResult> Edit(string id)
     {
-        var x=await users.FindByIdAsync(id);if(x is null)return NotFound();
-        return View(new EditarUsuarioForm{Id=x.Id,Email=x.Email??"",Nombre=x.Nombre,Apellidos=x.Apellidos,Telefono=x.PhoneNumber,Activo=x.Activo,Rol=(await users.GetRolesAsync(x)).FirstOrDefault()??"Usuario"});
+        var u = await users.FindByIdAsync(id);
+        if (u is null) return NotFound();
+        return View(new EditarUsuarioForm
+        {
+            Id = u.Id, Email = u.Email ?? "", Nombre = u.Nombre, Apellidos = u.Apellidos,
+            Telefono = u.PhoneNumber, Activo = u.Activo
+        });
     }
-    [HttpPost,ValidateAntiForgeryToken,RequestSizeLimit(6_000_000)]
-    public async Task<IActionResult> Edit(string id,EditarUsuarioForm form,CancellationToken ct)
+
+    [HttpPost, ValidateAntiForgeryToken, RequestSizeLimit(6_000_000)]
+    public async Task<IActionResult> Edit(string id, EditarUsuarioForm form, CancellationToken ct)
     {
-        if(id!=form.Id)return BadRequest();
-        if(!await roles.RoleExistsAsync(form.Rol))ModelState.AddModelError(nameof(form.Rol),"Rol inválido.");
-        if(!ModelState.IsValid)return View(form);
-        var x=await users.FindByIdAsync(id);if(x is null)return NotFound();
-        if(x.Id==User.FindFirstValue(ClaimTypes.NameIdentifier) && (!form.Activo || form.Rol!="Administrador"))
-        {ModelState.AddModelError("","No puede desactivarse ni quitarse su propio rol administrador.");return View(form);}
-        x.Nombre=form.Nombre;x.Apellidos=form.Apellidos;x.PhoneNumber=form.Telefono;x.Activo=form.Activo;
-        if(x.Email!=form.Email)
+        if (id != form.Id) return BadRequest();
+        if (!ModelState.IsValid) return View(form);
+        var u = await users.FindByIdAsync(id);
+        if (u is null) return NotFound();
+
+        // Evita que un usuario se desactive a si mismo por accidente.
+        if (id == User.FindFirstValue(ClaimTypes.NameIdentifier) && !form.Activo)
         {
-            var r=await users.SetEmailAsync(x,form.Email);if(!r.Succeeded){Errores(r);return View(form);}
-            r=await users.SetUserNameAsync(x,form.Email);if(!r.Succeeded){Errores(r);return View(form);}
-            x.EmailConfirmed=true;
+            ModelState.AddModelError(string.Empty, "No puedes desactivar tu propia cuenta.");
+            return View(form);
         }
-        if(form.Imagen is {Length:>0})
+
+        u.Nombre = form.Nombre.Trim();
+        u.Apellidos = form.Apellidos.Trim();
+        u.PhoneNumber = form.Telefono;
+        u.Activo = form.Activo;
+        if (!string.Equals(u.Email, form.Email.Trim(), StringComparison.OrdinalIgnoreCase))
         {
-            try{x.RutaImagen=await archivos.GuardarAsync(form.Imagen,ct);}
-            catch(InvalidOperationException ex){ModelState.AddModelError(nameof(form.Imagen),ex.Message);return View(form);}
+            var changed = await users.SetEmailAsync(u, form.Email.Trim());
+            if (!changed.Succeeded) { AddErrors(changed); return View(form); }
+            changed = await users.SetUserNameAsync(u, form.Email.Trim());
+            if (!changed.Succeeded) { AddErrors(changed); return View(form); }
+            u.EmailConfirmed = true;
         }
-        var result=await users.UpdateAsync(x);if(!result.Succeeded){Errores(result);return View(form);}
-        if(form.Activo && await users.IsLockedOutAsync(x))await users.SetLockoutEndDateAsync(x,null);
-        var oldRoles=await users.GetRolesAsync(x);
-        var remove=await users.RemoveFromRolesAsync(x,oldRoles);
-        if(!remove.Succeeded){Errores(remove);return View(form);}
-        var add=await users.AddToRoleAsync(x,form.Rol);
-        if(!add.Succeeded){Errores(add);return View(form);}
-        await users.UpdateSecurityStampAsync(x);
-        logger.LogInformation("Admin {Admin} actualizó usuario {Id}",User.Identity?.Name,id);
+        if (form.Imagen is { Length: > 0 })
+        {
+            try { u.RutaImagen = await archivos.GuardarAsync(form.Imagen, ct); }
+            catch (InvalidOperationException ex)
+            {
+                ModelState.AddModelError(nameof(form.Imagen), ex.Message);
+                return View(form);
+            }
+        }
+        var result = await users.UpdateAsync(u);
+        if (!result.Succeeded) { AddErrors(result); return View(form); }
+        if (form.Activo && await users.IsLockedOutAsync(u))
+            await users.SetLockoutEndDateAsync(u, null);
+        await users.UpdateSecurityStampAsync(u);
+        logger.LogInformation("Usuario {Editor} actualizo cuenta {Id}", User.Identity?.Name, id);
+        TempData["Mensaje"] = "Usuario actualizado.";
         return RedirectToAction(nameof(Index));
     }
-    [HttpPost,ValidateAntiForgeryToken]
+
+    [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> Delete(string id)
     {
-        if(User.FindFirstValue(ClaimTypes.NameIdentifier)==id){TempData["Error"]="No puede eliminarse su propia cuenta.";return RedirectToAction(nameof(Index));}
-        var x=await users.FindByIdAsync(id);if(x is null)return NotFound();
-        var result=await users.DeleteAsync(x);
-        if(!result.Succeeded){Errores(result);TempData["Error"]="No se pudo eliminar el usuario.";}
+        if (User.FindFirstValue(ClaimTypes.NameIdentifier) == id)
+        {
+            TempData["Error"] = "No puedes eliminar tu propia cuenta.";
+            return RedirectToAction(nameof(Index));
+        }
+        var user = await users.FindByIdAsync(id);
+        if (user is null) return NotFound();
+        var result = await users.DeleteAsync(user);
+        if (!result.Succeeded) { AddErrors(result); TempData["Error"] = "No se pudo eliminar la cuenta."; }
+        else TempData["Mensaje"] = "Usuario eliminado.";
         return RedirectToAction(nameof(Index));
     }
+
     public async Task<IActionResult> ResetPassword(string id)
     {
-        var x=await users.FindByIdAsync(id);return x is null?NotFound():View(model:x);
+        var user = await users.FindByIdAsync(id);
+        return user is null ? NotFound() : View(model: user);
     }
-    [HttpPost,ValidateAntiForgeryToken]
-    public async Task<IActionResult> ResetPassword(string id,string nuevaPassword)
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> ResetPassword(string id, string nuevaPassword)
     {
-        var x=await users.FindByIdAsync(id);if(x is null)return NotFound();
-        if(string.IsNullOrWhiteSpace(nuevaPassword) || nuevaPassword.Length<10)
-        {ModelState.AddModelError("","La contraseña debe tener al menos 10 caracteres.");return View(model:x);}
-        var token=await users.GeneratePasswordResetTokenAsync(x);
-        var result=await users.ResetPasswordAsync(x,token,nuevaPassword);
-        if(!result.Succeeded){Errores(result);return View(model:x);}
-        logger.LogWarning("Administrador {Admin} restableció contraseña de {Id}",User.Identity?.Name,id);
-        TempData["Mensaje"]="Contraseña restablecida. Entréguela mediante un canal seguro.";
+        var user = await users.FindByIdAsync(id);
+        if (user is null) return NotFound();
+        if (string.IsNullOrWhiteSpace(nuevaPassword) || nuevaPassword.Length < 8)
+        {
+            ModelState.AddModelError(string.Empty, "La contraseña debe tener al menos 8 caracteres.");
+            return View(model: user);
+        }
+        var token = await users.GeneratePasswordResetTokenAsync(user);
+        var result = await users.ResetPasswordAsync(user, token, nuevaPassword);
+        if (!result.Succeeded) { AddErrors(result); return View(model: user); }
+        logger.LogWarning("Usuario {Editor} cambio la clave de {Id}", User.Identity?.Name, id);
+        TempData["Mensaje"] = "Contraseña actualizada.";
         return RedirectToAction(nameof(Index));
     }
-    [HttpGet]
-    public async Task<IActionResult> Imagen(string id,CancellationToken ct)
+
+    public async Task<IActionResult> Imagen(string id, CancellationToken ct)
     {
-        var x=await users.FindByIdAsync(id);if(x is null)return NotFound();
-        var f=await archivos.LeerAsync(x.RutaImagen,ct);if(f is null)return NotFound();
-        Response.Headers.CacheControl="private, no-store";
-        return File(f.Value.Contenido,f.Value.Mime);
+        var user = await users.FindByIdAsync(id);
+        if (user is null) return NotFound();
+        var photo = await archivos.LeerAsync(user.RutaImagen, ct);
+        if (photo is null) return NotFound();
+        Response.Headers.CacheControl = "private, no-store";
+        return File(photo.Value.Contenido, photo.Value.Mime);
     }
-    private void Errores(IdentityResult result){foreach(var e in result.Errors)ModelState.AddModelError("",e.Description);}
+
+    private void AddErrors(IdentityResult result)
+    {
+        foreach (var error in result.Errors)
+            ModelState.AddModelError(string.Empty, error.Description);
+    }
 }

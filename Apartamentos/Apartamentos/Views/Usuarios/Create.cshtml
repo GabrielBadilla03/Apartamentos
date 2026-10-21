@@ -4,7 +4,7 @@
 @Html.AntiForgeryToken()<div asp-validation-summary="All" class="validation"></div>
 <div class="form-grid"><div class="field"><label asp-for="Nombre">Nombre</label><input asp-for="Nombre" required/></div><div class="field"><label asp-for="Apellidos">Apellidos</label><input asp-for="Apellidos" required/></div>
 <div class="field"><label asp-for="Email">Correo para ingresar</label><input asp-for="Email" type="email" required/></div><div class="field"><label asp-for="Telefono">Teléfono</label><input asp-for="Telefono" type="tel"/></div>
-<div class="field"><label asp-for="Password">Contraseña inicial</label><input asp-for="Password" type="password" required minlength="10" autocomplete="new-password"/></div>
-<div class="field"><label asp-for="Rol">Rol</label><select asp-for="Rol"><option value="Usuario">Usuario</option><option value="Administrador">Administrador</option></select></div></div>
+<div class="field"><label asp-for="Password">Contraseña inicial</label><input asp-for="Password" type="password" required minlength="8" autocomplete="new-password"/></div>
+</div>
 <div class="field"><label asp-for="Imagen">Imagen de perfil (opcional)</label><input asp-for="Imagen" type="file" accept="image/jpeg,image/png,image/webp"/></div>
 <div class="actions"><button type="submit" class="btn primary">Crear usuario</button><a asp-action="Index" class="btn">Cancelar</a></div></form>

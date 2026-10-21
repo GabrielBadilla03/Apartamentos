@@ -11,6 +11,6 @@ public sealed class EditarUsuarioForm
     [Required,MaxLength(100)] public string Apellidos { get; set; } = "";
     [Phone] public string? Telefono { get; set; }
     public bool Activo { get; set; }
-    [Required] public string Rol { get; set; } = "Usuario";
+
     public IFormFile? Imagen { get; set; }
 }

@@ -1,0 +1,12 @@
+
+/* Estilos de consultas AyA / ICE */
+.tabla-consultas { min-width: 1060px; }
+.acciones-recibos { align-items: flex-start; gap: 6px; }
+.acciones-recibos .btn { font-size: 12px; padding: 7px 9px; }
+.acciones-recibos form { display:inline-flex; }
+.acciones-recibos .btn:disabled { opacity:.5; cursor:not-allowed; }
+.registro-manual { margin-top:8px; min-width:245px; font-size:12px; }
+.registro-manual summary { color:#165a9f; cursor:pointer; }
+.registro-manual-form { display:flex; flex-wrap:wrap; gap:7px; margin-top:8px; }
+.registro-manual-form label { display:flex; flex-direction:column; gap:4px; font-weight:600; }
+.registro-manual-form input { min-width:100px; max-width:170px; border:1px solid #bccada; padding:7px; border-radius:5px; }

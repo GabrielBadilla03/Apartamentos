@@ -6,10 +6,10 @@ namespace Apartamentos.ViewModels;
 public sealed class CrearUsuarioForm
 {
     [Required,EmailAddress] public string Email { get; set; } = "";
-    [Required,MinLength(10)] public string Password { get; set; } = "";
+    [Required,MinLength(8)] public string Password { get; set; } = "";
     [Required,MaxLength(100)] public string Nombre { get; set; } = "";
     [Required,MaxLength(100)] public string Apellidos { get; set; } = "";
     [Phone] public string? Telefono { get; set; }
-    [Required] public string Rol { get; set; } = "Usuario";
+
     public IFormFile? Imagen { get; set; }
 }

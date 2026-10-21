@@ -1,22 +1,88 @@
 @model IEnumerable<Apartamentos.Models.Agua>
-@{ViewData["Title"]="Servicios de agua";var admin=User.IsInRole("Administrador");}
-<div class="heading"><div><h1>Servicios de agua</h1><p>Consulta de servicios, vencimientos y apartamentos asignados.</p></div>
-@if(admin){<a asp-action="Create" class="btn primary">Agregar</a>}</div>
-<div class="toolbar"><a asp-action="Descargar" class="btn">PDF de servicios</a><a asp-action="Descargar" asp-route-montos="true" class="btn">PDF montos registrados</a>
-@if(admin){
-<form method="post" asp-action="AvanzarPeriodo">@Html.AntiForgeryToken()<button class="btn" type="submit">Avanzar fechas vencidas</button></form>
-<form method="post" asp-action="ActualizarFechas" onsubmit="return confirm('¿Consultar todos los servicios activos en el proveedor?');">@Html.AntiForgeryToken()<button class="btn" type="submit">Actualizar vencimientos externos</button></form>
+@inject Microsoft.Extensions.Configuration.IConfiguration Config
+@{
+    ViewData["Title"] = "Servicios de agua";
+    var puedeGestionar = User.Identity?.IsAuthenticated == true;
+    var selenium = string.Equals(Config["Consulta:HabilitarSelenium"], "true", System.StringComparison.OrdinalIgnoreCase);
+    var visible = !string.Equals(Config["Consulta:ChromeVisible"], "false", System.StringComparison.OrdinalIgnoreCase);
 }
+<div class="heading">
+  <div><h1>Servicios de agua</h1><p>Consultar recibos de AyA, verificar fechas y administrar los servicios.</p></div>
+  @if (puedeGestionar) { <a asp-action="Create" class="btn primary">Agregar servicio</a> }
 </div>
-<div class="table-wrap"><table><thead><tr><th>NIS</th><th>Titular</th><th>Apartamentos</th><th>Vencimiento</th><th>Fecha pago</th><th>Inicio</th><th>Consultar</th><th>Acciones</th></tr></thead><tbody>
-@foreach(var x in Model){<tr><td>@x.IdAgua</td><td>@x.Titular</td>
-<td>@string.Join(", ",x.Apartamentos.Select(a=>a.Ubicacion+" "+a.DescripcionDepartamento))</td>
-<td>@x.FechaVencimiento?.ToString("dd/MM/yyyy")</td><td>@x.FechaPagar?.ToString("dd/MM/yyyy")</td><td>@x.FechaInicioPago?.ToString("dd/MM/yyyy")</td>
-<td>@(x.Pagar?"Sí":"No")</td><td><div class="actions">
-@if(admin){<a asp-action="Edit" asp-route-id="@x.IdAgua" class="btn small">Editar</a>
-<form method="post" asp-action="ConsultarSinRegistrar" asp-route-id="@x.IdAgua">@Html.AntiForgeryToken()<button class="btn small" type="submit">Solo consultar</button></form>
-<form method="post" asp-action="ConsultarRegistrar" asp-route-id="@x.IdAgua" onsubmit="return confirm('Solo consulta y registra importe, NO realiza un pago real. ¿Continuar?');">@Html.AntiForgeryToken()<button class="btn small" type="submit">Consultar / Registrar</button></form>
-<form method="post" asp-action="Delete" asp-route-id="@x.IdAgua" onsubmit="return confirm('¿Eliminar este servicio?');">@Html.AntiForgeryToken()<button class="btn danger small" type="submit">Eliminar</button></form>}
-</div></td></tr>}
-</tbody></table></div>
-@if(!Model.Any()){<p>No hay servicios de agua registrados.</p>}
+<link rel="stylesheet" href="~/css/consultas.css" asp-append-version="true" />
+<div class="alert">
+    <strong>Consulta automatica:</strong> @(selenium ? "Habilitada" : "Deshabilitada").
+    <strong>Chrome visible:</strong> @(visible ? "Solicitado" : "Desactivado").
+    El navegador automatizado se ejecuta en el equipo servidor, no necesariamente en este navegador web.
+    <a href="https://www.aya.go.cr/inicio/gestiones_interes/cf/consultar_factura" target="_blank" rel="noopener noreferrer">Abrir pagina oficial de AyA</a>.
+    @if (!selenium) { <span>Active Consulta:HabilitarSelenium=true para consultar automaticamente.</span> }
+</div>
+<div class="toolbar">
+    <a asp-action="Descargar" class="btn">PDF de servicios</a>
+    <a asp-action="Descargar" asp-route-montos="true" class="btn">PDF de montos guardados</a>
+    @if (puedeGestionar) {
+        <form method="post" asp-action="AvanzarPeriodo">
+            @Html.AntiForgeryToken()
+            <button class="btn" type="submit">Avanzar fechas vencidas</button>
+        </form>
+    }
+</div>
+<div class="table-wrap">
+  <table class="tabla-consultas">
+    <thead><tr><th>NIS</th><th>Titular</th><th>Apartamentos</th><th>Vencimiento</th><th>Fecha pago</th><th>Inicio</th><th>Registrar monto</th><th>Consultas y acciones</th></tr></thead>
+    <tbody>
+    @foreach (var x in Model) {
+      <tr>
+        <td>@x.IdAgua</td>
+        <td>@x.Titular</td>
+        <td>@string.Join(", ", x.Apartamentos.Select(a => a.Ubicacion + " " + a.DescripcionDepartamento))</td>
+        <td>@x.FechaVencimiento?.ToString("dd/MM/yyyy")</td>
+        <td>@x.FechaPagar?.ToString("dd/MM/yyyy")</td>
+        <td>@x.FechaInicioPago?.ToString("dd/MM/yyyy")</td>
+        <td>@(x.Pagar ? "Si" : "No")</td>
+        <td>
+          <div class="actions acciones-recibos">
+            <form method="post" asp-action="ConsultarSinRegistrar" asp-route-id="@x.IdAgua" class="form-consulta" data-consulta="1">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="btn primary small" disabled="@(!selenium)">Consultar en AyA</button>
+            </form>
+            <a class="btn small" href="https://www.aya.go.cr/inicio/gestiones_interes/cf/consultar_factura" target="_blank" rel="noopener noreferrer">Abrir AyA</a>
+            @if (puedeGestionar) {
+              <form method="post" asp-action="ConsultarRegistrar" asp-route-id="@x.IdAgua" class="form-consulta" data-consulta="1">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="btn small" disabled="@(!selenium)">Consultar y registrar</button>
+              </form>
+              <a asp-action="Edit" asp-route-id="@x.IdAgua" class="btn small">Editar</a>
+              <form method="post" asp-action="Delete" asp-route-id="@x.IdAgua" onsubmit="return confirm('¿Eliminar el servicio?');">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="btn danger small">Eliminar</button>
+              </form>
+            }
+          </div>
+          @if (puedeGestionar && x.Pagar) {
+            <details class="registro-manual">
+                <summary>Registrar monto verificado manualmente</summary>
+                <form method="post" asp-action="RegistrarManual" asp-route-id="@x.IdAgua" class="registro-manual-form">
+                    @Html.AntiForgeryToken()
+                    <label>Monto en colones <input type="number" name="monto" min="0.01" max="1000000000" step="0.01" required /></label>
+                    <label>Vencimiento <input type="date" name="vencimiento" /></label>
+                    <button type="submit" class="btn small primary" onclick="return confirm('¿Verifico este monto en la pagina oficial?');">Guardar monto</button>
+                </form>
+            </details>
+          }
+        </td>
+      </tr>
+    }
+    </tbody>
+  </table>
+</div>
+@if (!Model.Any()) { <p>No se han registrado servicios de agua.</p> }
+<script>
+ document.querySelectorAll('form[data-consulta="1"]').forEach(form => {
+   form.addEventListener('submit', () => {
+     const btn = form.querySelector('button[type=submit]');
+     if (btn) { btn.disabled = true; btn.textContent = 'Consultando...'; }
+   });
+ });
+</script>

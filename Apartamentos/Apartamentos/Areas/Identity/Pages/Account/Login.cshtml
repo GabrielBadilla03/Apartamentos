@@ -1,83 +1,86 @@
-﻿@page
-@model LoginModel
-
+@page
+@model Apartamentos.Areas.Identity.Pages.Account.LoginModel
 @{
-    ViewData["Title"] = "Log in";
+    Layout = null;
+    ViewData["Title"] = "Iniciar sesión";
 }
-
-<h1>@ViewData["Title"]</h1>
-<div class="row">
-    <div class="col-md-4">
-        <section>
-            <form id="account" method="post">
-                <h2>Use a local account to log in.</h2>
-                <hr />
-                <div asp-validation-summary="ModelOnly" class="text-danger" role="alert"></div>
-                <div class="form-floating mb-3">
-                    <input asp-for="Input.Email" class="form-control" autocomplete="username" aria-required="true" placeholder="name@example.com" />
-                    <label asp-for="Input.Email" class="form-label">Email</label>
-                    <span asp-validation-for="Input.Email" class="text-danger"></span>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#102a43" />
+    <title>Iniciar sesión | Apartamentos</title>
+    <link rel="stylesheet" href="~/css/login.css" asp-append-version="true" />
+</head>
+<body>
+    <main class="login-shell">
+        <section class="brand-panel" aria-label="Acerca de Apartamentos">
+            <div class="brand-top">
+                <span class="brand-symbol" aria-hidden="true">
+                    <svg viewBox="0 0 32 32" fill="none"><path d="M5 27V10L16 4l11 6v17H5Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M12 27v-8h8v8M11 13h3m4 0h3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                </span>
+                <span>Apartamentos</span>
+            </div>
+            <div class="brand-copy">
+                <span class="brand-eyebrow">ADMINISTRACIÓN CENTRALIZADA</span>
+                <h1>Todo en orden.<br /><em>Todo en un lugar.</em></h1>
+                <p>Gestioná apartamentos, encargados y servicios de agua y electricidad desde una sola plataforma.</p>
+                <div class="brand-features" aria-hidden="true">
+                    <span>◎ Apartamentos</span><span>◌ Encargados</span><span>◈ Servicios</span>
                 </div>
-                <div class="form-floating mb-3">
-                    <input asp-for="Input.Password" class="form-control" autocomplete="current-password" aria-required="true" placeholder="password" />
-                    <label asp-for="Input.Password" class="form-label">Password</label>
-                    <span asp-validation-for="Input.Password" class="text-danger"></span>
-                </div>
-                <div class="checkbox mb-3">
-                    <label asp-for="Input.RememberMe" class="form-label">
-                        <input class="form-check-input" asp-for="Input.RememberMe" />
-                        @Html.DisplayNameFor(m => m.Input.RememberMe)
-                    </label>
-                </div>
-                <div>
-                    <button id="login-submit" type="submit" class="w-100 btn btn-lg btn-primary">Log in</button>
-                </div>
-                <div>
-                    <p>
-                        <a id="forgot-password" asp-page="./ForgotPassword">Forgot your password?</a>
-                    </p>
-                    <p>
-                        <a asp-page="./Register" asp-route-returnUrl="@Model.ReturnUrl">Register as a new user</a>
-                    </p>
-                    <p>
-                        <a id="resend-confirmation" asp-page="./ResendEmailConfirmation">Resend email confirmation</a>
-                    </p>
-                </div>
-            </form>
+            </div>
+            <div class="brand-bottom">Sistema de gestión de apartamentos</div>
         </section>
-    </div>
-    <div class="col-md-6 col-md-offset-2">
-        <section>
-            <h3>Use another service to log in.</h3>
-            <hr />
-            @{
-                if ((Model.ExternalLogins?.Count ?? 0) == 0)
-                {
-                    <div>
-                        <p>
-                            There are no external authentication services configured. See this <a href="https://go.microsoft.com/fwlink/?LinkID=532715">article
-                            about setting up this ASP.NET application to support logging in via external services</a>.
-                        </p>
+        <section class="login-panel">
+            <div class="login-card">
+                <div class="mobile-brand" aria-hidden="true">▦ Apartamentos</div>
+                <div class="card-heading">
+                    <span class="welcome-tag">BIENVENIDO DE NUEVO</span>
+                    <h2>Iniciar sesión</h2>
+                    <p>Ingresá con tu cuenta para continuar.</p>
+                </div>
+                <form id="account" method="post" asp-route-returnUrl="@Model.ReturnUrl">
+                    <div asp-validation-summary="ModelOnly" class="login-errors" role="alert"></div>
+                    <div class="input-group">
+                        <label asp-for="Input.Email">Correo electrónico</label>
+                        <input asp-for="Input.Email" type="email" autocomplete="username" inputmode="email"
+                               placeholder="nombre@correo.com" required autofocus />
+                        <span asp-validation-for="Input.Email" class="field-error"></span>
                     </div>
-                }
-                else
-                {
-                    <form id="external-account" asp-page="./ExternalLogin" asp-route-returnUrl="@Model.ReturnUrl" method="post" class="form-horizontal">
-                        <div>
-                            <p>
-                                @foreach (var provider in Model.ExternalLogins!)
-                                {
-                                    <button type="submit" class="btn btn-primary" name="provider" value="@provider.Name" title="Log in using your @provider.DisplayName account">@provider.DisplayName</button>
-                                }
-                            </p>
+                    <div class="input-group">
+                        <div class="label-row"><label asp-for="Input.Password">Contraseña</label></div>
+                        <div class="password-wrap">
+                            <input asp-for="Input.Password" id="loginPassword" type="password"
+                                   autocomplete="current-password" placeholder="Ingresá tu contraseña" required />
+                            <button class="toggle-password" type="button" id="togglePassword"
+                                    aria-controls="loginPassword" aria-pressed="false" aria-label="Mostrar contraseña">Mostrar</button>
                         </div>
-                    </form>
-                }
-            }
+                        <span asp-validation-for="Input.Password" class="field-error"></span>
+                    </div>
+                    <div class="form-options">
+                        <label class="remember-me"><input asp-for="Input.RememberMe" type="checkbox" /> Recordarme</label>
+                    </div>
+                    <button id="login-submit" class="submit-button" type="submit">Ingresar <span aria-hidden="true">→</span></button>
+                </form>
+                <p class="admin-help">¿No podés ingresar? Contactá al administrador del sistema.</p>
+                <p class="privacy-note">Acceso exclusivo para usuarios autorizados.</p>
+            </div>
         </section>
-    </div>
-</div>
-
-@section Scripts {
-    <partial name="_ValidationScriptsPartial" />
-}
+    </main>
+    <script>
+        (() => {
+            const button = document.getElementById('togglePassword');
+            const field = document.getElementById('loginPassword');
+            if (!button || !field) return;
+            button.addEventListener('click', () => {
+                const visible = field.type === 'password';
+                field.type = visible ? 'text' : 'password';
+                button.textContent = visible ? 'Ocultar' : 'Mostrar';
+                button.setAttribute('aria-pressed', String(visible));
+                button.setAttribute('aria-label', visible ? 'Ocultar contraseña' : 'Mostrar contraseña');
+            });
+        })();
+    </script>
+</body>
+</html>

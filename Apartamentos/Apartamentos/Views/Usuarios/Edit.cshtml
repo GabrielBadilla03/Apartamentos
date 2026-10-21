@@ -4,7 +4,7 @@
 @Html.AntiForgeryToken()<input asp-for="Id" type="hidden"/><div asp-validation-summary="All" class="validation"></div>
 <div class="form-grid"><div class="field"><label asp-for="Nombre">Nombre</label><input asp-for="Nombre" required/></div><div class="field"><label asp-for="Apellidos">Apellidos</label><input asp-for="Apellidos" required/></div>
 <div class="field"><label asp-for="Email">Correo de acceso</label><input asp-for="Email" type="email" required/></div><div class="field"><label asp-for="Telefono">Teléfono</label><input asp-for="Telefono"/></div>
-<div class="field"><label asp-for="Rol">Rol</label><select asp-for="Rol"><option value="Usuario">Usuario</option><option value="Administrador">Administrador</option></select></div></div>
+</div>
 <label class="check"><input asp-for="Activo" type="checkbox"/> Usuario activo</label>
 <div class="field"><label asp-for="Imagen">Cambiar imagen (opcional)</label><input asp-for="Imagen" type="file" accept="image/jpeg,image/png,image/webp"/></div>
 <div class="actions"><button type="submit" class="btn primary">Guardar</button><a asp-action="Index" class="btn">Cancelar</a></div></form>

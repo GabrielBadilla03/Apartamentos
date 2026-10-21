@@ -1,12 +1,12 @@
 @model IEnumerable<MontoLuz>
-@{ViewData["Title"]="Montos de luz";var admin=User.IsInRole("Administrador");}
+@{ViewData["Title"]="Montos de luz";var puedeGestionar = User.Identity?.IsAuthenticated == true;}
 <div class="heading"><div><h1>Montos de luz</h1><p>Historial de registros y consultas por número de servicio.</p></div>
-@if(admin){<a asp-action="Create" class="btn primary">Agregar monto</a>}</div>
+@if(puedeGestionar){<a asp-action="Create" class="btn primary">Agregar monto</a>}</div>
 <form method="get" asp-action="Index" class="toolbar"><label for="idServicio">Filtrar por NIS</label>
 <input name="idServicio" id="idServicio" type="number" value="@ViewBag.IdServicio" placeholder="Todos"/>
 <button class="btn" type="submit">Consultar</button><a asp-action="Index" class="btn">Limpiar</a></form>
 <div class="table-wrap"><table><thead><tr><th>ID</th><th>NIS</th><th>Fecha de registro</th><th>Monto</th><th>Acciones</th></tr></thead><tbody>
 @foreach(var x in Model){<tr><td>@x.IdMonto</td><td>@x.IdLuz</td><td>@x.FechaRegistro.ToString("MM/yyyy")</td><td>₡@x.Monto.ToString("N2")</td>
-<td><div class="actions">@if(admin){<a asp-action="Edit" asp-route-id="@x.IdMonto" class="btn small">Editar</a>
+<td><div class="actions">@if(puedeGestionar){<a asp-action="Edit" asp-route-id="@x.IdMonto" class="btn small">Editar</a>
 <form method="post" asp-action="Delete" asp-route-id="@x.IdMonto" onsubmit="return confirm('¿Eliminar registro de monto?');">@Html.AntiForgeryToken()<button class="btn danger small" type="submit">Eliminar</button></form>}</div></td></tr>}
 </tbody></table></div>
