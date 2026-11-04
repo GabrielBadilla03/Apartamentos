@@ -15,12 +15,13 @@
     <strong>Consulta automatica:</strong> @(selenium ? "Habilitada" : "Deshabilitada").
     <strong>Chrome visible:</strong> @(visible ? "Solicitado" : "Desactivado").
     El navegador automatizado se ejecuta en el equipo servidor, no necesariamente en este navegador web.
-    <a href="https://agenciaelectricidad.cn.ice.go.cr/public/consultaFacturaElectrica?externo=true" target="_blank" rel="noopener noreferrer">Abrir pagina oficial de ICE</a>.
+    El PDF de montos consulta cada servicio marcado para pagar; puede tardar y AyA requiere CAPTCHA manual por consulta.
+    <a href="https://agenciaelectricidad.cn.ice.go.cr/public/consultaFacturaElectrica" target="_blank" rel="noopener noreferrer">Abrir pagina oficial de ICE</a>.
     @if (!selenium) { <span>Active Consulta:HabilitarSelenium=true para consultar automaticamente.</span> }
 </div>
 <div class="toolbar">
     <a asp-action="Descargar" class="btn">PDF de servicios</a>
-    <a asp-action="Descargar" asp-route-montos="true" class="btn">PDF de montos guardados</a>
+    <a asp-action="Descargar" asp-route-montos="true" class="btn">PDF de montos en vivo</a>
     @if (puedeGestionar) {
         <form method="post" asp-action="AvanzarPeriodo">
             @Html.AntiForgeryToken()
@@ -47,7 +48,7 @@
                 @Html.AntiForgeryToken()
                 <button type="submit" class="btn primary small" disabled="@(!selenium)">Consultar en ICE</button>
             </form>
-            <a class="btn small" href="https://agenciaelectricidad.cn.ice.go.cr/public/consultaFacturaElectrica?externo=true" target="_blank" rel="noopener noreferrer">Abrir ICE</a>
+            <a class="btn small" href="https://agenciaelectricidad.cn.ice.go.cr/public/consultaFacturaElectrica" target="_blank" rel="noopener noreferrer">Abrir ICE</a>
             @if (puedeGestionar) {
               <form method="post" asp-action="ConsultarRegistrar" asp-route-id="@x.IdLuz" class="form-consulta" data-consulta="1">
                 @Html.AntiForgeryToken()
