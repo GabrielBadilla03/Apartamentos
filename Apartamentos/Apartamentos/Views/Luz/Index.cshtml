@@ -23,6 +23,10 @@
     <a asp-action="Descargar" class="btn">PDF de servicios</a>
     <a asp-action="Descargar" asp-route-montos="true" class="btn">PDF de montos en vivo</a>
     @if (puedeGestionar) {
+        <form method="post" asp-action="ActualizarFechas" data-consulta="1">
+            @Html.AntiForgeryToken()
+            <button class="btn primary" type="submit" disabled="@(!selenium)">Actualizar Fechas (ICE)</button>
+        </form>
         <form method="post" asp-action="AvanzarPeriodo">
             @Html.AntiForgeryToken()
             <button class="btn" type="submit">Avanzar fechas vencidas</button>
