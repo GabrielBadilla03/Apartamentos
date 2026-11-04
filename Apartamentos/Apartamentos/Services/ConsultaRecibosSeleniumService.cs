@@ -42,6 +42,116 @@ public sealed class ConsultaRecibosSeleniumService(
         }
     }
 
+    public async Task<IReadOnlyList<ResultadoConsultaLote>> ConsultarLoteAsync(
+        string proveedor, IReadOnlyCollection<long> numerosServicio, CancellationToken ct)
+    {
+        if (!config.GetValue<bool>("Consulta:HabilitarSelenium"))
+            throw new InvalidOperationException("La consulta automatica esta desactivada en la configuracion efectiva.");
+        if (proveedor is not ("agua" or "luz"))
+            throw new ArgumentException("Proveedor no valido.", nameof(proveedor));
+        if (numerosServicio.Any(n => n <= 0))
+            throw new ArgumentException("Hay numeros de servicio no validos.", nameof(numerosServicio));
+
+        if (!await NavegadorEnUso.WaitAsync(TimeSpan.FromSeconds(30), ct))
+            throw new InvalidOperationException("Ya se esta consultando otro servicio. Intente cuando termine.");
+
+        try
+        {
+            return await Task.Run(() => ConsultarLoteEnChrome(proveedor, numerosServicio, ct), ct);
+        }
+        finally
+        {
+            NavegadorEnUso.Release();
+        }
+    }
+
+    private IReadOnlyList<ResultadoConsultaLote> ConsultarLoteEnChrome(
+        string proveedor, IReadOnlyCollection<long> numerosServicio, CancellationToken ct)
+    {
+        bool esAya = proveedor == "agua";
+        bool visible = config.GetValue("Consulta:ChromeVisible", true);
+        bool sesionInteractiva = Environment.UserInteractive;
+        if (OperatingSystem.IsWindows())
+            sesionInteractiva = sesionInteractiva && Process.GetCurrentProcess().SessionId != 0;
+
+        if (esAya && (!visible || !sesionInteractiva))
+            throw new InvalidOperationException(
+                "AyA necesita una ventana Chrome visible para resolver manualmente el CAPTCHA. " +
+                "Ejecute la aplicacion en una sesion de escritorio interactiva.");
+
+        bool headless = !visible || !sesionInteractiva;
+        string perfil = Path.Combine(Path.GetTempPath(), "ApartamentosChromeLote_" + Guid.NewGuid().ToString("N"));
+        ChromeDriver? driver = null;
+        var resultados = new List<ResultadoConsultaLote>();
+
+        try
+        {
+            ct.ThrowIfCancellationRequested();
+            var options = new ChromeOptions();
+            options.AddArgument("--window-size=1400,900");
+            options.AddArgument("--no-first-run");
+            options.AddArgument("--no-default-browser-check");
+            options.AddArgument("--disable-notifications");
+            options.AddArgument("--user-data-dir=" + perfil);
+            if (headless) options.AddArgument("--headless=new");
+
+            string? binary = config["Consulta:ChromeBinaryPath"];
+            if (!string.IsNullOrWhiteSpace(binary))
+            {
+                if (!File.Exists(binary))
+                    throw new InvalidOperationException("ChromeBinaryPath no existe: " + binary);
+                options.BinaryLocation = binary;
+            }
+
+            var service = ChromeDriverService.CreateDefaultService();
+            service.HideCommandPromptWindow = true;
+            driver = new ChromeDriver(service, options, TimeSpan.FromSeconds(50));
+            driver.Manage().Timeouts().PageLoad = TimeSpan.FromSeconds(35);
+            driver.Manage().Timeouts().ImplicitWait = TimeSpan.Zero;
+
+            foreach (long numero in numerosServicio.Distinct())
+            {
+                ct.ThrowIfCancellationRequested();
+                try
+                {
+                    // Una sola sesion Chrome para todos los servicios.
+                    // Se vuelve a cargar el portal por NIS para limpiar la consulta anterior.
+                    driver.Navigate().GoToUrl(esAya ? UrlAya : UrlIce);
+                    var resultado = esAya
+                        ? ConsultarAya(driver, numero, ct)
+                        : ConsultarIce(driver, numero, ct);
+                    resultados.Add(new ResultadoConsultaLote(numero, resultado, null));
+                    log.LogInformation("Fecha consultada: {Proveedor} NIS {Nis}: {Fecha}",
+                        proveedor, numero, resultado.FechaVencimiento);
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    log.LogWarning(ex, "Fallo la consulta de fecha de {Proveedor} NIS {Nis}",
+                        proveedor, numero);
+                    resultados.Add(new ResultadoConsultaLote(numero, null, ex.Message));
+                }
+            }
+            return resultados;
+        }
+        finally
+        {
+            if (driver is not null)
+            {
+                try { driver.Quit(); }
+                catch (Exception ex) { log.LogWarning(ex, "No se pudo cerrar Chrome del lote"); }
+                try { driver.Dispose(); }
+                catch (Exception ex) { log.LogWarning(ex, "No se pudo liberar Chrome del lote"); }
+            }
+            try { if (Directory.Exists(perfil)) Directory.Delete(perfil, recursive: true); }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
+    }
+
     private ResultadoConsulta ConsultarEnChrome(string proveedor, long nis, CancellationToken ct)
     {
         bool esAya = proveedor == "agua";
