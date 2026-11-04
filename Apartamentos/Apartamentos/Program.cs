@@ -43,9 +43,44 @@ builder.Services.AddScoped<IArchivoPrivadoService, ArchivoPrivadoService>();
 builder.Services.AddScoped<IConsultaRecibosService, ConsultaRecibosSeleniumService>();
 builder.Services.AddScoped<IReporteService, ReporteService>();
 var app = builder.Build();
+
+// El modo sin login solo funciona en Desarrollo y desde el mismo equipo.
+// No desactiva Identity ni la proteccion de los despliegues de produccion.
+var desactivarLoginTemporal = app.Environment.IsDevelopment() &&
+    app.Configuration.GetValue<bool>("Seguridad:DesactivarLoginTemporal");
+if (desactivarLoginTemporal)
+    app.Logger.LogWarning("Acceso temporal sin login habilitado para conexiones locales de desarrollo.");
 if (!app.Environment.IsDevelopment()) { app.UseExceptionHandler("/Home/Error"); app.UseHsts(); }
 app.UseHttpsRedirection(); app.UseStaticFiles(); app.UseRouting();
-app.UseAuthentication(); app.UseAuthorization();
+app.UseAuthentication();
+if (desactivarLoginTemporal)
+{
+    app.Use(async (context, next) =>
+    {
+        var ip = context.Connection.RemoteIpAddress;
+        if (ip is not null &&
+            System.Net.IPAddress.IsLoopback(ip.IsIPv4MappedToIPv6 ? ip.MapToIPv4() : ip))
+        {
+            // Identidad de prueba por solicitud: no inicia sesion ni crea usuarios reales.
+            context.Items["LoginTemporalDesactivado"] = true;
+            context.User = new System.Security.Claims.ClaimsPrincipal(
+                new System.Security.Claims.ClaimsIdentity(
+                    new[]
+                    {
+                        new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.NameIdentifier, "desarrollo-sin-login"),
+                        new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Name, "Acceso temporal")
+                    },
+                    "DesarrolloSinLogin"));
+            if (context.Request.Path.StartsWithSegments("/Identity/Account/Login"))
+            {
+                context.Response.Redirect("/");
+                return;
+            }
+        }
+        await next();
+    });
+}
+app.UseAuthorization();
 app.MapControllerRoute("default", "{controller=Home}/{action=Index}/{id?}");
 app.MapRazorPages();
 // Requiere ejecutar antes: dotnet ef database update
