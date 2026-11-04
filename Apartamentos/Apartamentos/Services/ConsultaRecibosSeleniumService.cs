@@ -18,7 +18,7 @@ public sealed class ConsultaRecibosSeleniumService(
     ILogger<ConsultaRecibosSeleniumService> log) : IConsultaRecibosService
 {
     private const string UrlAya = "https://www.aya.go.cr/inicio/gestiones_interes/cf/consultar_factura";
-    private const string UrlIce = "https://agenciaelectricidad.cn.ice.go.cr/public/consultaFacturaElectrica?externo=true";
+    private const string UrlIce = "https://agenciaelectricidad.cn.ice.go.cr/public/consultaFacturaElectrica";
     private static readonly SemaphoreSlim NavegadorEnUso = new(1, 1);
 
     public async Task<ResultadoConsulta> ConsultarAsync(string proveedor, long numeroServicio, CancellationToken ct)
@@ -179,6 +179,8 @@ public sealed class ConsultaRecibosSeleniumService(
                     "Chrome debe estar visible en el escritorio del equipo que ejecuta ASP.NET.", ex);
             }
             if (!resuelto) throw new InvalidOperationException("AyA no confirmo que el CAPTCHA este resuelto.");
+            // El portal AyA del proyecto Java espera 3 segundos tras la validacion manual.
+            EsperarConCancelacion(TimeSpan.FromSeconds(3), ct);
         }
 
         var consultar = Buscar(driver, 25, ct,
@@ -215,6 +217,11 @@ public sealed class ConsultaRecibosSeleniumService(
             By.XPath("//table//tbody/tr[1]/td[5]//span"),
             By.XPath("/html/body/div/div/main/div[2]/div/div/div/div/div[1]/div[3]/table/tbody/tr/td[5]/div[2]/span"));
         return new ResultadoConsulta(ParseMonto(monto.Text), ParseFecha(fecha?.Text));
+    }
+
+    private static void EsperarConCancelacion(TimeSpan tiempo, CancellationToken ct)
+    {
+        Task.Delay(tiempo, ct).GetAwaiter().GetResult();
     }
 
     private static IWebElement Buscar(IWebDriver driver, int segundos, CancellationToken ct, params By[] selectores)
