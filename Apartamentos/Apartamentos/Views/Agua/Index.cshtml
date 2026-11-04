@@ -15,12 +15,13 @@
     <strong>Consulta automatica:</strong> @(selenium ? "Habilitada" : "Deshabilitada").
     <strong>Chrome visible:</strong> @(visible ? "Solicitado" : "Desactivado").
     El navegador automatizado se ejecuta en el equipo servidor, no necesariamente en este navegador web.
+    El PDF de montos consulta cada servicio marcado para pagar; puede tardar y AyA requiere CAPTCHA manual por consulta.
     <a href="https://www.aya.go.cr/inicio/gestiones_interes/cf/consultar_factura" target="_blank" rel="noopener noreferrer">Abrir pagina oficial de AyA</a>.
     @if (!selenium) { <span>Active Consulta:HabilitarSelenium=true para consultar automaticamente.</span> }
 </div>
 <div class="toolbar">
     <a asp-action="Descargar" class="btn">PDF de servicios</a>
-    <a asp-action="Descargar" asp-route-montos="true" class="btn">PDF de montos guardados</a>
+    <a asp-action="Descargar" asp-route-montos="true" class="btn">PDF de montos en vivo</a>
     @if (puedeGestionar) {
         <form method="post" asp-action="AvanzarPeriodo">
             @Html.AntiForgeryToken()
