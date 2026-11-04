@@ -33,6 +33,9 @@ public sealed class ReporteService(
             {
                 ct.ThrowIfCancellationRequested();
                 var resultado = montos ? await ConsultarMonto("agua", servicio.IdAgua, ct) : null;
+                if (montos && resultado is { Monto: > 0 })
+                    await RegistrarMontoAguaAsync(servicio.IdAgua, resultado.Monto, ct);
+
                 filas.Add(new[]
                 {
                     servicio.IdAgua.ToString(CultureInfo.InvariantCulture),
@@ -64,6 +67,9 @@ public sealed class ReporteService(
             {
                 ct.ThrowIfCancellationRequested();
                 var resultado = montos ? await ConsultarMonto("luz", servicio.IdLuz, ct) : null;
+                if (montos && resultado is { Monto: > 0 })
+                    await RegistrarMontoLuzAsync(servicio.IdLuz, resultado.Monto, ct);
+
                 filas.Add(new[]
                 {
                     servicio.IdLuz.ToString(CultureInfo.InvariantCulture),
@@ -82,6 +88,44 @@ public sealed class ReporteService(
             }
         }
         return GeneradorPdfSeguro.Crear(agua ? "Listado de Agua" : "Listado de Luz", filas);
+    }
+
+    // Registrar cada resultado inmediatamente para que no se pierdan los anteriores
+    // si una consulta posterior falla. Coincide con la validacion de ConsultarRegistrar.
+    private async Task RegistrarMontoAguaAsync(long nis, decimal monto, CancellationToken ct)
+    {
+        if (monto <= 0) return;
+        var hoy = DateTime.Today;
+        bool existe = await db.MontosAgua.AsNoTracking()
+            .AnyAsync(x => x.IdAgua == nis && x.FechaRegistro == hoy && x.Monto == monto, ct);
+        if (existe) return;
+
+        db.MontosAgua.Add(new MontoAgua
+        {
+            IdAgua = nis,
+            Monto = monto,
+            FechaRegistro = hoy
+        });
+        await db.SaveChangesAsync(ct);
+        log.LogInformation("Monto de AyA guardado: NIS {Nis}, importe {Monto}", nis, monto);
+    }
+
+    private async Task RegistrarMontoLuzAsync(long nis, decimal monto, CancellationToken ct)
+    {
+        if (monto <= 0) return;
+        var hoy = DateTime.Today;
+        bool existe = await db.MontosLuz.AsNoTracking()
+            .AnyAsync(x => x.IdLuz == nis && x.FechaRegistro == hoy && x.Monto == monto, ct);
+        if (existe) return;
+
+        db.MontosLuz.Add(new MontoLuz
+        {
+            IdLuz = nis,
+            Monto = monto,
+            FechaRegistro = hoy
+        });
+        await db.SaveChangesAsync(ct);
+        log.LogInformation("Monto de ICE guardado: NIS {Nis}, importe {Monto}", nis, monto);
     }
 
     private async Task<ResultadoConsulta?> ConsultarMonto(string tipo, long nis, CancellationToken ct)
