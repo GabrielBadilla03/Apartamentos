@@ -84,20 +84,67 @@ public sealed class AguaController(ApplicationDbContext db, IConsultaRecibosServ
         catch(Exception ex){log.LogError(ex,"Error de consulta agua: {Id}",id);TempData["Error"]="Consulta automatica no completada: "+ex.Message;}
         return RedirectToAction(nameof(Index));
     }
-    [HttpPost,ValidateAntiForgeryToken]
+    [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> ActualizarFechas(CancellationToken ct)
     {
-        var servicios=await db.Aguas.Where(x=>x.Pagar).ToListAsync(ct);
-        int ok=0,fallos=0;
-        foreach(var x in servicios)
+        // Igual que el proyecto anterior: solo servicios con Pagar=true.
+        // ConsultarLoteAsync reutiliza Chrome para todos los NIS.
+        var servicios = await db.Aguas.Where(x => x.Pagar)
+            .OrderBy(x => x.IdAgua).ToListAsync(ct);
+        if (servicios.Count == 0)
         {
-            try{var r=await consulta.ConsultarAsync("agua",x.IdAgua,ct);
-                if(r.FechaVencimiento.HasValue){x.FechaVencimiento=r.FechaVencimiento.Value.Date;await db.SaveChangesAsync(ct);ok++;}}
-            catch(Exception ex){fallos++;log.LogWarning(ex,"Error consultando servicio {Id}",x.IdAgua);}
+            TempData["Mensaje"] = "No hay servicios marcados para pagar.";
+            return RedirectToAction(nameof(Index));
         }
-        TempData["Mensaje"]=$"Fechas actualizadas: {ok}; fallidas: {fallos}.";
+
+        IReadOnlyList<ResultadoConsultaLote> consultas;
+        try
+        {
+            consultas = await consulta.ConsultarLoteAsync("agua",
+                servicios.Select(x => x.IdAgua).ToArray(), ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            log.LogError(ex, "No se pudo iniciar la actualizacion masiva de fechas Agua");
+            TempData["Error"] = "No se pudo consultar AyA: " + ex.Message;
+            return RedirectToAction(nameof(Index));
+        }
+
+        var porId = servicios.ToDictionary(x => x.IdAgua);
+        int actualizados = 0, sinCambio = 0, sinFecha = 0, fallidos = 0;
+        foreach (var consultaItem in consultas)
+        {
+            ct.ThrowIfCancellationRequested();
+            if (consultaItem.Error is not null || consultaItem.Resultado is null)
+            {
+                fallidos++;
+                continue;
+            }
+            if (!consultaItem.Resultado.FechaVencimiento.HasValue)
+            {
+                sinFecha++;
+                continue;
+            }
+            var fecha = consultaItem.Resultado.FechaVencimiento.Value.Date;
+            var servicio = porId[consultaItem.NumeroServicio];
+            if (servicio.FechaVencimiento?.Date == fecha)
+            {
+                sinCambio++;
+                continue;
+            }
+            servicio.FechaVencimiento = fecha;
+            await db.SaveChangesAsync(ct);
+            actualizados++;
+        }
+
+        TempData["Mensaje"] = $"Fechas actualizadas: {actualizados}. Sin cambios: {sinCambio}. Sin fecha: {sinFecha}. Consultas fallidas: {fallidos}.";
         return RedirectToAction(nameof(Index));
     }
+
     [HttpPost,ValidateAntiForgeryToken]
     public async Task<IActionResult> AvanzarPeriodo(CancellationToken ct)
     {
