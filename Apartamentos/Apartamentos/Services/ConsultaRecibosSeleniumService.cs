@@ -366,10 +366,45 @@ public sealed class ConsultaRecibosSeleniumService(
         EsperarVerificacionAya(driver, ct);
         EsperarConCancelacion(TimeSpan.FromSeconds(3), ct);
 
+        // Al usar la misma pagina, la tabla anterior puede quedar visible
+        // mientras AyA procesa el nuevo NIS. Nunca reutilizarla como resultado nuevo.
+        var selectorFila = By.XPath(
+            "//app-grid-table//ag-grid-angular//div[contains(@class,'ag-center-cols-container')]//div[contains(@class,'ag-row')][1]");
+        var filaAnterior = driver.FindElements(selectorFila).FirstOrDefault();
+        string? textoAnterior = null;
+        if (filaAnterior is not null)
+        {
+            try { textoAnterior = filaAnterior.Text; }
+            catch (StaleElementReferenceException) { filaAnterior = null; }
+        }
+
         var consultar = Buscar(driver, 25, ct,
             By.XPath(consultarXpath),
             By.XPath("//app-consultar-factura//button[contains(., 'Consultar')]"));
         consultar.Click();
+
+        if (filaAnterior is not null)
+        {
+            var esperarActualizacion = new WebDriverWait(driver, TimeSpan.FromSeconds(35))
+            { PollingInterval = TimeSpan.FromMilliseconds(500) };
+            esperarActualizacion.Until(d =>
+            {
+                ct.ThrowIfCancellationRequested();
+                try
+                {
+                    // La respuesta actualizo o reemplazo la fila.
+                    _ = filaAnterior.Displayed;
+                    var actual = d.FindElements(selectorFila).FirstOrDefault();
+                    return actual is not null &&
+                           !string.IsNullOrWhiteSpace(actual.Text) &&
+                           !string.Equals(textoAnterior, actual.Text, StringComparison.Ordinal);
+                }
+                catch (StaleElementReferenceException)
+                {
+                    return true;
+                }
+            });
+        }
 
         // Usar primero las rutas exactas de la tabla actual. Los XPath
         // genericos quedan como respaldo ante cambios menores de estructura.
