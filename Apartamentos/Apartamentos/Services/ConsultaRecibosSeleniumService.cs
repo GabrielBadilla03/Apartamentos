@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Text.RegularExpressions;
+using System.Text.Json;
 using OpenQA.Selenium;
 using OpenQA.Selenium.Chrome;
 using OpenQA.Selenium.Support.UI;
@@ -80,7 +81,7 @@ public sealed class ConsultaRecibosSeleniumService(
                 "Ejecute la aplicacion en una sesion de escritorio interactiva.");
 
         bool headless = !visible || !sesionInteractiva;
-        string perfil = Path.Combine(Path.GetTempPath(), "ApartamentosChromeLote_" + Guid.NewGuid().ToString("N"));
+        string? perfilTemporal = esAya ? null : Path.Combine(Path.GetTempPath(), "ApartamentosChromeLote_" + Guid.NewGuid().ToString("N"));
         ChromeDriver? driver = null;
         var resultados = new List<ResultadoConsultaLote>();
 
@@ -92,7 +93,7 @@ public sealed class ConsultaRecibosSeleniumService(
             options.AddArgument("--no-first-run");
             options.AddArgument("--no-default-browser-check");
             options.AddArgument("--disable-notifications");
-            options.AddArgument("--user-data-dir=" + perfil);
+            ConfigurarPerfilNavegador(options, esAya, perfilTemporal);
             if (headless) options.AddArgument("--headless=new");
 
             ConfigurarBinarioNavegador(options, esAya);
@@ -140,10 +141,73 @@ public sealed class ConsultaRecibosSeleniumService(
                 try { driver.Dispose(); }
                 catch (Exception ex) { log.LogWarning(ex, "No se pudo liberar Chrome del lote"); }
             }
-            try { if (Directory.Exists(perfil)) Directory.Delete(perfil, recursive: true); }
+            try { if (perfilTemporal is not null && Directory.Exists(perfilTemporal)) Directory.Delete(perfilTemporal, recursive: true); }
             catch (IOException) { }
             catch (UnauthorizedAccessException) { }
         }
+    }
+
+    // Se emplea el perfil REAL de Brave solo para AyA. ICE sigue usando
+    // su directorio temporal para no alterar el flujo que ya funciona.
+    private void ConfigurarPerfilNavegador(
+        ChromeOptions options, bool esAya, string? perfilTemporal)
+    {
+        if (!esAya)
+        {
+            options.AddArgument("--user-data-dir=" + perfilTemporal);
+            return;
+        }
+
+        string carpetaUsuarios = config["Consulta:BraveUserDataDir"]?.Trim() ?? "";
+        if (string.IsNullOrWhiteSpace(carpetaUsuarios))
+            carpetaUsuarios = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "BraveSoftware", "Brave-Browser", "User Data");
+
+        if (!Directory.Exists(carpetaUsuarios))
+            throw new InvalidOperationException(
+                "No se encontro la carpeta de datos de Brave: " + carpetaUsuarios +
+                ". Configure Consulta:BraveUserDataDir con la ruta de 'User Data' del usuario de Windows.");
+
+        string nombrePerfil = config["Consulta:BraveProfileDirectory"]?.Trim() ?? "";
+        if (string.IsNullOrWhiteSpace(nombrePerfil))
+        {
+            // Chromium guarda en Local State el ultimo perfil usado (p.ej. Default o Profile 1).
+            string estado = Path.Combine(carpetaUsuarios, "Local State");
+            if (File.Exists(estado))
+            {
+                try
+                {
+                    using var documento = JsonDocument.Parse(File.ReadAllText(estado));
+                    if (documento.RootElement.TryGetProperty("profile", out var perfilInfo) &&
+                        perfilInfo.TryGetProperty("last_used", out var ultimo) &&
+                        ultimo.ValueKind == JsonValueKind.String)
+                        nombrePerfil = ultimo.GetString()?.Trim() ?? "";
+                }
+                catch (IOException ex) { log.LogWarning(ex, "No se pudo leer el ultimo perfil de Brave."); }
+                catch (UnauthorizedAccessException ex) { log.LogWarning(ex, "No se pudo leer el ultimo perfil de Brave."); }
+                catch (JsonException ex) { log.LogWarning(ex, "Local State de Brave no contiene JSON valido."); }
+            }
+            if (string.IsNullOrWhiteSpace(nombrePerfil)) nombrePerfil = "Default";
+        }
+
+        // El nombre no debe poder escapar de la carpeta de perfiles.
+        if (!Regex.IsMatch(nombrePerfil, @"^(Default|Profile [0-9]+)$"))
+            throw new InvalidOperationException(
+                "Perfil de Brave no valido: " + nombrePerfil +
+                ". Configure BraveProfileDirectory como Default o Profile 1, Profile 2, etc.");
+
+        if (!Directory.Exists(Path.Combine(carpetaUsuarios, nombrePerfil)))
+            throw new InvalidOperationException(
+                "No existe el perfil de Brave '" + nombrePerfil + "' en " + carpetaUsuarios +
+                ". Revise brave://version > Ruta del perfil.");
+
+        options.AddArgument("--user-data-dir=" + carpetaUsuarios);
+        options.AddArgument("--profile-directory=" + nombrePerfil);
+        log.LogInformation("AyA usara el perfil existente de Brave: {Perfil}", nombrePerfil);
+
+        // IMPORTANTE: no se debe borrar ni recrear este directorio en el finally.
+        // Brave debe estar completamente cerrado antes de iniciar ChromeDriver.
     }
 
     // AyA usa Brave por defecto. ICE conserva la configuracion de Chrome.
@@ -210,7 +274,7 @@ public sealed class ConsultaRecibosSeleniumService(
                 "AyA exige Brave visible para resolver el CAPTCHA. Configure Consulta:ChromeVisible=true.");
 
         bool headless = !visible || !sesionInteractiva;
-        string perfil = Path.Combine(Path.GetTempPath(), "ApartamentosChrome_" + Guid.NewGuid().ToString("N"));
+        string? perfilTemporal = esAya ? null : Path.Combine(Path.GetTempPath(), "ApartamentosChrome_" + Guid.NewGuid().ToString("N"));
         ChromeDriver? driver = null;
         try
         {
@@ -220,7 +284,7 @@ public sealed class ConsultaRecibosSeleniumService(
             options.AddArgument("--no-first-run");
             options.AddArgument("--no-default-browser-check");
             options.AddArgument("--disable-notifications");
-            options.AddArgument("--user-data-dir=" + perfil);
+            ConfigurarPerfilNavegador(options, esAya, perfilTemporal);
             if (headless) options.AddArgument("--headless=new");
 
             ConfigurarBinarioNavegador(options, esAya);
@@ -255,6 +319,11 @@ public sealed class ConsultaRecibosSeleniumService(
         }
         catch (WebDriverException ex)
         {
+            if (esAya && (ex.Message.Contains("user data directory is already in use", StringComparison.OrdinalIgnoreCase) ||
+                          ex.Message.Contains("DevToolsActivePort", StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException(
+                    "No se pudo abrir el perfil personal de Brave. Cierre todas las ventanas y procesos de Brave " +
+                    "antes de consultar AyA; Selenium no puede tomar el control del mismo perfil mientras esta abierto.", ex);
             log.LogError(ex, "No se pudo operar Chrome para {Proveedor} NIS {Nis}", proveedor, nis);
             throw new InvalidOperationException(
                 "ChromeDriver fallo. Verifique Chrome/Brave, Selenium Manager, permisos del perfil y la sesion de Windows. " +
@@ -269,7 +338,7 @@ public sealed class ConsultaRecibosSeleniumService(
                 try { driver.Dispose(); }
                 catch (Exception ex) { log.LogWarning(ex, "No se pudo liberar ChromeDriver normalmente"); }
             }
-            try { if (Directory.Exists(perfil)) Directory.Delete(perfil, recursive: true); }
+            try { if (perfilTemporal is not null && Directory.Exists(perfilTemporal)) Directory.Delete(perfilTemporal, recursive: true); }
             catch (IOException) { /* Chrome puede continuar liberando archivos */ }
             catch (UnauthorizedAccessException) { }
         }
