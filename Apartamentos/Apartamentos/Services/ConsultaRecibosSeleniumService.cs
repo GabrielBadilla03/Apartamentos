@@ -245,67 +245,115 @@ public sealed class ConsultaRecibosSeleniumService(
 
     private ResultadoConsulta ConsultarAya(ChromeDriver driver, long nis, CancellationToken ct)
     {
+        // XPath verificados en la pagina de AyA: noviembre de 2026.
+        const string inputXpath =
+            "/html/body/app-root/app-home/div/main/app-consultar-factura/div/div/form/div/div[1]/app-campo-formulario/div/input";
+        const string consultarXpath =
+            "/html/body/app-root/app-home/div/main/app-consultar-factura/div/div/form/div/div[2]/button";
+        const string vencimientoXpath =
+            "/html/body/app-root/app-home/div/main/app-consultar-factura/div/div/app-grid-table/div/ag-grid-angular/div/div[1]/div[2]/div[3]/div[1]/div[2]/div/div/div[3]/div/span";
+        const string montoXpath =
+            "/html/body/app-root/app-home/div/main/app-consultar-factura/div/div/app-grid-table/div/ag-grid-angular/div/div[1]/div[2]/div[3]/div[1]/div[2]/div/div/div[6]/div/span";
+
         var input = Buscar(driver, 30, ct,
-            By.XPath("//app-consultar-factura//input"),
-            By.XPath("/html/body/app-root/app-home/div/main/app-consultar-factura/div/div/form/div/div[1]/app-campo-formulario/div/input"));
+            By.XPath(inputXpath),
+            By.XPath("//app-consultar-factura//input"));
         input.Clear();
         input.SendKeys(nis.ToString(CultureInfo.InvariantCulture));
 
-        // Espera a que una persona resuelva el CAPTCHA en el escritorio del servidor.
-        // No se simulan clics ni se intenta eludir la proteccion.
-        bool hayCaptcha = driver.FindElements(By.CssSelector("iframe[src*='recaptcha'],iframe[title*='reCAPTCHA']")).Count > 0;
-        if (hayCaptcha)
-        {
-            var wait = new WebDriverWait(driver, TimeSpan.FromSeconds(150))
-            { PollingInterval = TimeSpan.FromMilliseconds(500) };
-            bool resuelto;
-            try
-            {
-                resuelto = wait.Until(d => {
-                    ct.ThrowIfCancellationRequested();
-                    try
-                    {
-                        // Algunas implementaciones llenan el textarea en el documento principal.
-                        var token = ((IJavaScriptExecutor)d).ExecuteScript(
-                            "return document.querySelector('textarea[name=\"g-recaptcha-response\"]')?.value || ''; ") as string;
-                        if (!string.IsNullOrWhiteSpace(token)) return true;
-                        var frame = d.FindElements(By.CssSelector("iframe[src*='recaptcha'],iframe[title*='reCAPTCHA']")).FirstOrDefault();
-                        if (frame is null) return false;
-                        d.SwitchTo().Frame(frame);
-                        try
-                        {
-                            var anchor = d.FindElements(By.Id("recaptcha-anchor")).FirstOrDefault();
-                            return anchor?.GetAttribute("aria-checked") == "true";
-                        }
-                        finally { d.SwitchTo().DefaultContent(); }
-                    }
-                    catch (WebDriverException) { d.SwitchTo().DefaultContent(); return false; }
-                });
-            }
-            catch (WebDriverTimeoutException ex)
-            {
-                throw new InvalidOperationException(
-                    "No se resolvio el CAPTCHA de AyA dentro del tiempo permitido. " +
-                    "Chrome debe estar visible en el escritorio del equipo que ejecuta ASP.NET.", ex);
-            }
-            if (!resuelto) throw new InvalidOperationException("AyA no confirmo que el CAPTCHA este resuelto.");
-            // El portal AyA del proyecto Java espera 3 segundos tras la validacion manual.
-            EsperarConCancelacion(TimeSpan.FromSeconds(3), ct);
-        }
+        // reCAPTCHA se resuelve manualmente en Brave/Chrome. El checkbox
+        // #recaptcha-anchor esta DENTRO del iframe, no en el documento principal.
+        EsperarVerificacionAya(driver, ct);
+        EsperarConCancelacion(TimeSpan.FromSeconds(3), ct);
 
         var consultar = Buscar(driver, 25, ct,
-            By.XPath("//app-consultar-factura//button[contains(., 'Consultar')]"),
-            By.XPath("/html/body/app-root/app-home/div/main/app-consultar-factura/div/div/form/div/div[2]/button"));
+            By.XPath(consultarXpath),
+            By.XPath("//app-consultar-factura//button[contains(., 'Consultar')]"));
         consultar.Click();
 
-        // Columnas obtenidas del proyecto Java; se evitan IDs generados dinamicamente por el sitio.
+        // Usar primero las rutas exactas de la tabla actual. Los XPath
+        // genericos quedan como respaldo ante cambios menores de estructura.
         var monto = Buscar(driver, 35, ct,
-            By.XPath("//ag-grid-angular//div[contains(@class,'ag-center-cols-container')]//div[contains(@class,'ag-row')]//div[contains(@class,'ag-cell')][6]//span"),
-            By.XPath("//ag-grid-angular/div/div[1]/div[2]/div[3]/div[1]/div[2]/div/div/div[6]/div/span"));
-        var fecha = BuscarOpcional(driver, 6, ct,
-            By.XPath("//ag-grid-angular//div[contains(@class,'ag-center-cols-container')]//div[contains(@class,'ag-row')]//div[contains(@class,'ag-cell')][3]//span"),
-            By.XPath("//ag-grid-angular/div/div[1]/div[2]/div[3]/div[1]/div[2]/div/div/div[3]/div/span"));
+            By.XPath(montoXpath),
+            By.XPath("//app-grid-table//ag-grid-angular//div[contains(@class,'ag-center-cols-container')]//div[contains(@class,'ag-row')]//div[contains(@class,'ag-cell')][6]//span"));
+        var fecha = BuscarOpcional(driver, 12, ct,
+            By.XPath(vencimientoXpath),
+            By.XPath("//app-grid-table//ag-grid-angular//div[contains(@class,'ag-center-cols-container')]//div[contains(@class,'ag-row')]//div[contains(@class,'ag-cell')][3]//span"));
+
+        // Ejemplos recibidos: fecha 20/11/2026, monto "¢ 3 461.00".
+        // ParseFecha usa dd/MM/yyyy y ParseMonto quita moneda/espacios.
         return new ResultadoConsulta(ParseMonto(monto.Text), ParseFecha(fecha?.Text));
+    }
+
+    private static void EsperarVerificacionAya(IWebDriver driver, CancellationToken ct)
+    {
+        const string selectorIframe = "iframe[src*='recaptcha'],iframe[title*='reCAPTCHA']";
+
+        // El iframe puede renderizarse DESPUES de escribir el NIS.
+        // No omitir la espera basandose en una comprobacion inmediata.
+        var esperaIframe = new WebDriverWait(driver, TimeSpan.FromSeconds(15))
+        { PollingInterval = TimeSpan.FromMilliseconds(500) };
+        bool tieneRecaptcha;
+        try
+        {
+            tieneRecaptcha = esperaIframe.Until(d =>
+            {
+                ct.ThrowIfCancellationRequested();
+                return d.FindElements(By.CssSelector(selectorIframe)).Count > 0;
+            });
+        }
+        catch (WebDriverTimeoutException)
+        {
+            // En caso de que AyA no presente CAPTCHA, el boton de consulta
+            // debe habilitarse normalmente para poder continuar.
+            return;
+        }
+
+        if (!tieneRecaptcha) return;
+
+        var esperaVerificacion = new WebDriverWait(driver, TimeSpan.FromSeconds(150))
+        { PollingInterval = TimeSpan.FromMilliseconds(500) };
+        try
+        {
+            esperaVerificacion.Until(d =>
+            {
+                ct.ThrowIfCancellationRequested();
+                try
+                {
+                    // El token se llena al verificar correctamente el CAPTCHA.
+                    var token = ((IJavaScriptExecutor)d).ExecuteScript(
+                        "return document.querySelector('textarea[name=\"g-recaptcha-response\"]')?.value || '';") as string;
+                    if (!string.IsNullOrWhiteSpace(token)) return true;
+
+                    var iframe = d.FindElements(By.CssSelector(selectorIframe))
+                        .FirstOrDefault(x => x.GetAttribute("src")?.Contains("/anchor") == true)
+                        ?? d.FindElements(By.CssSelector(selectorIframe)).FirstOrDefault();
+                    if (iframe is null) return false;
+
+                    d.SwitchTo().Frame(iframe);
+                    try
+                    {
+                        var casilla = d.FindElements(By.Id("recaptcha-anchor")).FirstOrDefault();
+                        return casilla?.GetAttribute("aria-checked") == "true";
+                    }
+                    finally
+                    {
+                        d.SwitchTo().DefaultContent();
+                    }
+                }
+                catch (WebDriverException)
+                {
+                    d.SwitchTo().DefaultContent();
+                    return false;
+                }
+            });
+        }
+        catch (WebDriverTimeoutException ex)
+        {
+            throw new InvalidOperationException(
+                "No se completo la verificacion manual de 'No soy un robot' en AyA. " +
+                "Marque la casilla en el navegador visible del equipo que ejecuta la aplicacion.", ex);
+        }
     }
 
     private ResultadoConsulta ConsultarIce(ChromeDriver driver, long nis, CancellationToken ct)
