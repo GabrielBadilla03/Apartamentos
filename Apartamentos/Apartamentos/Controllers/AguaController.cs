@@ -208,6 +208,8 @@ public sealed class AguaController(ApplicationDbContext db, IConsultaRecibosServ
         try
         {
             var pdf=await reporte.GenerarServiciosAsync(true,montos,ct);
+            log.LogInformation("AyA PDF generado y listo para descargar: tipo {Tipo}, bytes {Bytes}",
+                montos ? "montos" : "servicios", pdf.Length);
             return File(pdf,"application/pdf",montos?"Montos_agua.pdf":"Servicios_agua.pdf");
         }
         catch (Exception ex)
