@@ -196,16 +196,27 @@ public sealed class ConsultaRecibosSeleniumService(
         }
         finally
         {
+            if (esAya)
+                log.LogInformation("AyA lote: iniciando cierre de Brave. ASP.NET debe continuar ejecutandose.");
             if (driver is not null)
             {
-                try { driver.Quit(); }
-                catch (Exception ex) { log.LogWarning(ex, "No se pudo cerrar Chrome del lote"); }
-                try { driver.Dispose(); }
-                catch (Exception ex) { log.LogWarning(ex, "No se pudo liberar Chrome del lote"); }
+                try
+                {
+                    // WebDriver.Quit() ya ejecuta Dispose(); llamarlos ambos era redundante.
+                    driver.Quit();
+                    if (esAya) log.LogInformation("AyA lote: Brave cerrado; proceso ASP.NET continua.");
+                }
+                catch (Exception ex) { log.LogWarning(ex, "No se pudo cerrar navegador del lote"); }
             }
-            try { if (Directory.Exists(perfilTemporal)) Directory.Delete(perfilTemporal, recursive: true); }
-            catch (IOException) { }
-            catch (UnauthorizedAccessException) { }
+            if (esAya) log.LogInformation("AyA lote: iniciando limpieza del perfil temporal.");
+            try
+            {
+                if (Directory.Exists(perfilTemporal))
+                    Directory.Delete(perfilTemporal, recursive: true);
+                if (esAya) log.LogInformation("AyA lote: perfil temporal eliminado; limpieza completa.");
+            }
+            catch (IOException ex) { log.LogWarning(ex, "Perfil temporal aun en uso: {Perfil}", perfilTemporal); }
+            catch (UnauthorizedAccessException ex) { log.LogWarning(ex, "No se pudo borrar perfil temporal: {Perfil}", perfilTemporal); }
         }
     }
 
@@ -330,16 +341,24 @@ public sealed class ConsultaRecibosSeleniumService(
         }
         finally
         {
+            if (esAya) log.LogInformation("AyA individual: iniciando cierre de Brave.");
             if (driver is not null)
             {
-                try { driver.Quit(); }
-                catch (Exception ex) { log.LogWarning(ex, "No se pudo cerrar ChromeDriver normalmente"); }
-                try { driver.Dispose(); }
-                catch (Exception ex) { log.LogWarning(ex, "No se pudo liberar ChromeDriver normalmente"); }
+                try
+                {
+                    driver.Quit(); // Quit ya libera el WebDriver
+                    if (esAya) log.LogInformation("AyA individual: Brave cerrado.");
+                }
+                catch (Exception ex) { log.LogWarning(ex, "No se pudo cerrar el navegador"); }
             }
-            try { if (Directory.Exists(perfilTemporal)) Directory.Delete(perfilTemporal, recursive: true); }
-            catch (IOException) { /* Chrome puede continuar liberando archivos */ }
-            catch (UnauthorizedAccessException) { }
+            try
+            {
+                if (Directory.Exists(perfilTemporal))
+                    Directory.Delete(perfilTemporal, recursive: true);
+                if (esAya) log.LogInformation("AyA individual: perfil temporal eliminado.");
+            }
+            catch (IOException ex) { log.LogWarning(ex, "Perfil temporal aun en uso: {Perfil}", perfilTemporal); }
+            catch (UnauthorizedAccessException ex) { log.LogWarning(ex, "No se pudo borrar perfil temporal: {Perfil}", perfilTemporal); }
         }
     }
 
