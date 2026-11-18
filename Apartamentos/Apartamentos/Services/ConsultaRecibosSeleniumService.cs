@@ -76,7 +76,7 @@ public sealed class ConsultaRecibosSeleniumService(
 
         if (esAya && (!visible || !sesionInteractiva))
             throw new InvalidOperationException(
-                "AyA necesita una ventana Chrome visible para resolver manualmente el CAPTCHA. " +
+                "AyA necesita una ventana Brave visible para resolver manualmente el CAPTCHA. " +
                 "Ejecute la aplicacion en una sesion de escritorio interactiva.");
 
         bool headless = !visible || !sesionInteractiva;
@@ -95,13 +95,7 @@ public sealed class ConsultaRecibosSeleniumService(
             options.AddArgument("--user-data-dir=" + perfil);
             if (headless) options.AddArgument("--headless=new");
 
-            string? binary = config["Consulta:ChromeBinaryPath"];
-            if (!string.IsNullOrWhiteSpace(binary))
-            {
-                if (!File.Exists(binary))
-                    throw new InvalidOperationException("ChromeBinaryPath no existe: " + binary);
-                options.BinaryLocation = binary;
-            }
+            ConfigurarBinarioNavegador(options, esAya);
 
             var service = ChromeDriverService.CreateDefaultService();
             service.HideCommandPromptWindow = true;
@@ -152,6 +146,51 @@ public sealed class ConsultaRecibosSeleniumService(
         }
     }
 
+    // AyA usa Brave por defecto. ICE conserva la configuracion de Chrome.
+    private void ConfigurarBinarioNavegador(ChromeOptions options, bool esAya)
+    {
+        if (!esAya)
+        {
+            string? chrome = config["Consulta:ChromeBinaryPath"];
+            if (!string.IsNullOrWhiteSpace(chrome))
+            {
+                if (!File.Exists(chrome))
+                    throw new InvalidOperationException("Consulta:ChromeBinaryPath no existe: " + chrome);
+                options.BinaryLocation = chrome;
+            }
+            return;
+        }
+
+        string? braveConfigurado = config["Consulta:BraveBinaryPath"];
+        if (!string.IsNullOrWhiteSpace(braveConfigurado))
+        {
+            if (!File.Exists(braveConfigurado))
+                throw new InvalidOperationException(
+                    "Consulta:BraveBinaryPath no existe: " + braveConfigurado);
+            options.BinaryLocation = braveConfigurado;
+            return;
+        }
+
+        string[] rutasBrave =
+        {
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+                "BraveSoftware", "Brave-Browser", "Application", "brave.exe"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
+                "BraveSoftware", "Brave-Browser", "Application", "brave.exe"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "BraveSoftware", "Brave-Browser", "Application", "brave.exe")
+        };
+
+        string? brave = rutasBrave.FirstOrDefault(File.Exists);
+        if (brave is null)
+            throw new InvalidOperationException(
+                "No se encontro Brave para las consultas de AyA. Instale Brave o configure " +
+                "Consulta:BraveBinaryPath con la ruta completa a brave.exe.");
+
+        options.BinaryLocation = brave;
+        log.LogInformation("AyA se consultara mediante Brave: {Ruta}", brave);
+    }
+
     private ResultadoConsulta ConsultarEnChrome(string proveedor, long nis, CancellationToken ct)
     {
         bool esAya = proveedor == "agua";
@@ -163,12 +202,12 @@ public sealed class ConsultaRecibosSeleniumService(
         // El CAPTCHA de AyA debe resolverlo una persona con acceso al Chrome del servidor.
         if (esAya && !sesionInteractiva)
             throw new InvalidOperationException(
-                "AyA requiere un CAPTCHA manual, pero la aplicacion se ejecuta sin escritorio interactivo. " +
+                "AyA requiere un CAPTCHA manual en Brave, pero la aplicacion se ejecuta sin escritorio interactivo. " +
                 "Abra AyA mediante el enlace 'Abrir AyA' en su navegador y use el registro manual.");
 
         if (esAya && !visible)
             throw new InvalidOperationException(
-                "AyA exige navegador visible para resolver el CAPTCHA. Configure Consulta:ChromeVisible=true.");
+                "AyA exige Brave visible para resolver el CAPTCHA. Configure Consulta:ChromeVisible=true.");
 
         bool headless = !visible || !sesionInteractiva;
         string perfil = Path.Combine(Path.GetTempPath(), "ApartamentosChrome_" + Guid.NewGuid().ToString("N"));
@@ -184,18 +223,11 @@ public sealed class ConsultaRecibosSeleniumService(
             options.AddArgument("--user-data-dir=" + perfil);
             if (headless) options.AddArgument("--headless=new");
 
-            // Permite usar Brave o una instalacion no estandar de Chrome.
-            string? binary = config["Consulta:ChromeBinaryPath"];
-            if (!string.IsNullOrWhiteSpace(binary))
-            {
-                if (!File.Exists(binary))
-                    throw new InvalidOperationException("ChromeBinaryPath no existe: " + binary);
-                options.BinaryLocation = binary;
-            }
+            ConfigurarBinarioNavegador(options, esAya);
 
             var service = ChromeDriverService.CreateDefaultService();
             service.HideCommandPromptWindow = true;
-            log.LogInformation("Iniciando Chrome {Modo} para {Proveedor} NIS {Nis}; sesion interactiva: {Interactiva}",
+            log.LogInformation("Iniciando navegador {Modo} para {Proveedor} NIS {Nis}; sesion interactiva: {Interactiva}",
                 headless ? "sin ventana" : "visible", proveedor, nis, sesionInteractiva);
             // Un limite por comando impide que Selenium quede bloqueado de forma indefinida.
             driver = new ChromeDriver(service, options, TimeSpan.FromSeconds(50));
