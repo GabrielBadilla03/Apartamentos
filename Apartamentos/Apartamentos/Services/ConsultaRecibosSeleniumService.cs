@@ -67,8 +67,59 @@ public sealed class ConsultaRecibosSeleniumService(
         }
     }
 
+    // Permite que el PDF reciba y guarde cada monto en cuanto termina
+    // la consulta, sin esperar a que todos los NIS se procesen.
+    public async IAsyncEnumerable<ResultadoConsultaLote> ConsultarLoteProgresivoAsync(
+        string proveedor, IReadOnlyCollection<long> numerosServicio,
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        if (!config.GetValue<bool>("Consulta:HabilitarSelenium"))
+            throw new InvalidOperationException("La consulta automatica esta desactivada.");
+        if (proveedor is not ("agua" or "luz") || numerosServicio.Any(n => n <= 0))
+            throw new ArgumentException("Proveedor o numeros de servicio no validos.");
+
+        var canal = Channel.CreateUnbounded<ResultadoConsultaLote>(
+            new UnboundedChannelOptions { SingleReader = true, SingleWriter = true });
+        using var cancelar = CancellationTokenSource.CreateLinkedTokenSource(ct);
+
+        var trabajador = Task.Run(async () =>
+        {
+            bool adquirido = false;
+            try
+            {
+                adquirido = await NavegadorEnUso.WaitAsync(TimeSpan.FromSeconds(30), cancelar.Token);
+                if (!adquirido)
+                    throw new InvalidOperationException("Ya se esta consultando otro servicio.");
+
+                ConsultarLoteEnChrome(proveedor, numerosServicio, cancelar.Token,
+                    item => canal.Writer.TryWrite(item));
+                canal.Writer.TryComplete();
+            }
+            catch (Exception ex)
+            {
+                canal.Writer.TryComplete(ex);
+            }
+            finally
+            {
+                if (adquirido) NavegadorEnUso.Release();
+            }
+        });
+
+        try
+        {
+            await foreach (var item in canal.Reader.ReadAllAsync(ct))
+                yield return item;
+        }
+        finally
+        {
+            cancelar.Cancel();
+            await trabajador;
+        }
+    }
+
     private IReadOnlyList<ResultadoConsultaLote> ConsultarLoteEnChrome(
-        string proveedor, IReadOnlyCollection<long> numerosServicio, CancellationToken ct)
+        string proveedor, IReadOnlyCollection<long> numerosServicio, CancellationToken ct,
+        Action<ResultadoConsultaLote>? alResultado = null)
     {
         bool esAya = proveedor == "agua";
         bool visible = config.GetValue("Consulta:ChromeVisible", true);
@@ -122,7 +173,9 @@ public sealed class ConsultaRecibosSeleniumService(
                     var resultado = esAya
                         ? ConsultarAya(driver, numero, ct)
                         : ConsultarIce(driver, numero, ct);
-                    resultados.Add(new ResultadoConsultaLote(numero, resultado, null));
+                    var item = new ResultadoConsultaLote(numero, resultado, null);
+                    resultados.Add(item);
+                    alResultado?.Invoke(item);
                     log.LogInformation("Fecha consultada: {Proveedor} NIS {Nis}: {Fecha}",
                         proveedor, numero, resultado.FechaVencimiento);
                 }
@@ -134,7 +187,9 @@ public sealed class ConsultaRecibosSeleniumService(
                 {
                     log.LogWarning(ex, "Fallo la consulta de fecha de {Proveedor} NIS {Nis}",
                         proveedor, numero);
-                    resultados.Add(new ResultadoConsultaLote(numero, null, ex.Message));
+                    var item = new ResultadoConsultaLote(numero, null, ex.Message);
+                    resultados.Add(item);
+                    alResultado?.Invoke(item);
                 }
             }
             return resultados;
