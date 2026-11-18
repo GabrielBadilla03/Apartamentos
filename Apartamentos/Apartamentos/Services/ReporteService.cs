@@ -29,27 +29,51 @@ public sealed class ReporteService(
                 .OrderBy(x => ClaveOrden(x.Apartamentos), StringComparer.OrdinalIgnoreCase)
                 .ThenBy(x => x.IdAgua).ToList();
 
-            foreach (var servicio in ordenados)
+            if (!montos)
             {
-                ct.ThrowIfCancellationRequested();
-                var resultado = montos ? await ConsultarMonto("agua", servicio.IdAgua, ct) : null;
-                if (montos && resultado is { Monto: > 0 })
-                    await RegistrarMontoAguaAsync(servicio.IdAgua, resultado.Monto, ct);
-
-                filas.Add(new[]
+                foreach (var servicio in ordenados)
                 {
-                    servicio.IdAgua.ToString(CultureInfo.InvariantCulture),
-                    servicio.FechaVencimiento?.ToString("yyyy-MM-dd") ?? "",
-                    TextoApartamentos(servicio.Apartamentos),
-                    servicio.Pagar ? "Sí" : "No",
-                    montos ? TextoMonto(resultado?.Monto) : ""
-                });
-
-                if (montos && resultado?.FechaVencimiento is DateTime nuevaFecha &&
-                    nuevaFecha.Date != servicio.FechaVencimiento?.Date)
+                    ct.ThrowIfCancellationRequested();
+                    filas.Add(new[]
+                    {
+                        servicio.IdAgua.ToString(CultureInfo.InvariantCulture),
+                        servicio.FechaVencimiento?.ToString("yyyy-MM-dd") ?? "",
+                        TextoApartamentos(servicio.Apartamentos),
+                        servicio.Pagar ? "Sí" : "No",
+                        ""
+                    });
+                }
+            }
+            else
+            {
+                // Un solo Brave y una sola pagina AyA: recibe los NIS uno a uno
+                // y guarda cada monto en SQL Server apenas termina la consulta.
+                var porId = ordenados.ToDictionary(x => x.IdAgua);
+                await foreach (var item in consulta.ConsultarLoteProgresivoAsync(
+                    "agua", ordenados.Select(x => x.IdAgua).ToArray(), ct))
                 {
-                    await db.Aguas.Where(x => x.IdAgua == servicio.IdAgua)
-                        .ExecuteUpdateAsync(s => s.SetProperty(x => x.FechaVencimiento, nuevaFecha.Date), ct);
+                    ct.ThrowIfCancellationRequested();
+                    var servicio = porId[item.NumeroServicio];
+                    var resultado = item.Resultado;
+                    if (resultado is { Monto: > 0 })
+                        await RegistrarMontoAguaAsync(servicio.IdAgua, resultado.Monto, ct);
+
+                    if (resultado?.FechaVencimiento is DateTime nuevaFecha &&
+                        nuevaFecha.Date != servicio.FechaVencimiento?.Date)
+                    {
+                        await db.Aguas.Where(x => x.IdAgua == servicio.IdAgua)
+                            .ExecuteUpdateAsync(s => s.SetProperty(x => x.FechaVencimiento, nuevaFecha.Date), ct);
+                        servicio.FechaVencimiento = nuevaFecha.Date;
+                    }
+
+                    filas.Add(new[]
+                    {
+                        servicio.IdAgua.ToString(CultureInfo.InvariantCulture),
+                        servicio.FechaVencimiento?.ToString("yyyy-MM-dd") ?? "",
+                        TextoApartamentos(servicio.Apartamentos),
+                        "Sí",
+                        TextoMonto(resultado?.Monto)
+                    });
                 }
             }
         }
