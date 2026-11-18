@@ -87,61 +87,107 @@ public sealed class AguaController(ApplicationDbContext db, IConsultaRecibosServ
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> ActualizarFechas(CancellationToken ct)
     {
-        // Igual que el proyecto anterior: solo servicios con Pagar=true.
-        // ConsultarLoteAsync reutiliza Chrome para todos los NIS.
-        var servicios = await db.Aguas.Where(x => x.Pagar)
-            .OrderBy(x => x.IdAgua).ToListAsync(ct);
+        // Guardar inmediatamente cada NIS. Anteriormente ConsultarLoteAsync
+        // terminaba todo el navegador antes de comenzar la primera actualizacion.
+        var servicios = await db.Aguas.AsNoTracking()
+            .Where(x => x.Pagar)
+            .OrderBy(x => x.IdAgua)
+            .Select(x => new { x.IdAgua, x.FechaVencimiento })
+            .ToListAsync(ct);
+
         if (servicios.Count == 0)
         {
             TempData["Mensaje"] = "No hay servicios marcados para pagar.";
             return RedirectToAction(nameof(Index));
         }
 
-        IReadOnlyList<ResultadoConsultaLote> consultas;
+        var fechasActuales = servicios.ToDictionary(x => x.IdAgua, x => x.FechaVencimiento);
+        int actualizados = 0, sinCambio = 0, sinFecha = 0, fallidos = 0;
+        int erroresGuardado = 0;
+        string? errorGeneral = null;
+
         try
         {
-            consultas = await consulta.ConsultarLoteAsync("agua",
-                servicios.Select(x => x.IdAgua).ToArray(), ct);
+            // AyA mantiene abierto un solo Brave y va informando cada consulta.
+            // Al recibir una fecha valida se guarda sin esperar al siguiente NIS.
+            await foreach (var item in consulta.ConsultarLoteProgresivoAsync(
+                "agua", servicios.Select(x => x.IdAgua).ToArray(), ct))
+            {
+                ct.ThrowIfCancellationRequested();
+                if (item.Error is not null || item.Resultado is null)
+                {
+                    fallidos++;
+                    log.LogWarning("NIS {Nis}: no se obtuvo vencimiento. {Error}",
+                        item.NumeroServicio, item.Error ?? "Sin respuesta");
+                    continue;
+                }
+
+                if (item.Resultado.FechaVencimiento is not DateTime fechaConsultada)
+                {
+                    sinFecha++;
+                    continue;
+                }
+
+                var fecha = fechaConsultada.Date;
+                if (fechasActuales[item.NumeroServicio]?.Date == fecha)
+                {
+                    sinCambio++;
+                    continue;
+                }
+
+                try
+                {
+                    // Evitar tracking de entidades de consultas anteriores.
+                    int afectadas = await db.Aguas
+                        .Where(x => x.IdAgua == item.NumeroServicio && x.Pagar)
+                        .ExecuteUpdateAsync(x => x.SetProperty(
+                            s => s.FechaVencimiento, fecha), ct);
+                    if (afectadas == 1)
+                    {
+                        fechasActuales[item.NumeroServicio] = fecha;
+                        actualizados++;
+                        log.LogInformation("AyA fecha GUARDADA para NIS {Nis}: {Fecha:dd/MM/yyyy}",
+                            item.NumeroServicio, fecha);
+                    }
+                    else
+                    {
+                        erroresGuardado++;
+                        log.LogWarning("NIS {Nis}: no se actualizo ninguna fila en agua.",
+                            item.NumeroServicio);
+                    }
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    erroresGuardado++;
+                    log.LogError(ex, "Error guardando fecha de AyA para NIS {Nis}. Se continua con el siguiente.",
+                        item.NumeroServicio);
+                }
+            }
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
+            log.LogWarning("Se cancelo Actualizar Fechas AyA, ya guardadas: {Actualizados}.", actualizados);
             throw;
         }
         catch (Exception ex)
         {
-            log.LogError(ex, "No se pudo iniciar la actualizacion masiva de fechas Agua");
-            TempData["Error"] = "No se pudo consultar AyA: " + ex.Message;
-            return RedirectToAction(nameof(Index));
+            log.LogError(ex, "Fallo general en Actualizar Fechas AyA despues de guardar {Actualizados} NIS.",
+                actualizados);
+            errorGeneral = ex.Message;
         }
 
-        var porId = servicios.ToDictionary(x => x.IdAgua);
-        int actualizados = 0, sinCambio = 0, sinFecha = 0, fallidos = 0;
-        foreach (var consultaItem in consultas)
-        {
-            ct.ThrowIfCancellationRequested();
-            if (consultaItem.Error is not null || consultaItem.Resultado is null)
-            {
-                fallidos++;
-                continue;
-            }
-            if (!consultaItem.Resultado.FechaVencimiento.HasValue)
-            {
-                sinFecha++;
-                continue;
-            }
-            var fecha = consultaItem.Resultado.FechaVencimiento.Value.Date;
-            var servicio = porId[consultaItem.NumeroServicio];
-            if (servicio.FechaVencimiento?.Date == fecha)
-            {
-                sinCambio++;
-                continue;
-            }
-            servicio.FechaVencimiento = fecha;
-            await db.SaveChangesAsync(ct);
-            actualizados++;
-        }
+        TempData["Mensaje"] =
+            $"AyA: fechas guardadas {actualizados}; sin cambios {sinCambio}; sin fecha {sinFecha}; " +
+            $"consultas fallidas {fallidos}; errores al guardar {erroresGuardado}.";
 
-        TempData["Mensaje"] = $"Fechas actualizadas: {actualizados}. Sin cambios: {sinCambio}. Sin fecha: {sinFecha}. Consultas fallidas: {fallidos}.";
+        if (errorGeneral is not null)
+            TempData["Error"] = "Se interrumpio la consulta de AyA, pero se conservaron las fechas ya guardadas. " +
+                "Detalle: " + errorGeneral;
+
         return RedirectToAction(nameof(Index));
     }
 
