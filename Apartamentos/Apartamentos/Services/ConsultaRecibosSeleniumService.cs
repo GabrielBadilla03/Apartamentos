@@ -285,32 +285,62 @@ public sealed class ConsultaRecibosSeleniumService(
         return new ResultadoConsulta(ParseMonto(monto.Text), ParseFecha(fecha?.Text));
     }
 
-    private static void EsperarVerificacionAya(IWebDriver driver, CancellationToken ct)
+    private void EsperarVerificacionAya(IWebDriver driver, CancellationToken ct)
     {
         const string selectorIframe = "iframe[src*='recaptcha'],iframe[title*='reCAPTCHA']";
 
-        // El iframe puede renderizarse DESPUES de escribir el NIS.
-        // No omitir la espera basandose en una comprobacion inmediata.
+        // El iframe de reCAPTCHA puede aparecer después de introducir el NIS.
         var esperaIframe = new WebDriverWait(driver, TimeSpan.FromSeconds(15))
         { PollingInterval = TimeSpan.FromMilliseconds(500) };
-        bool tieneRecaptcha;
+        IWebElement? iframe;
         try
         {
-            tieneRecaptcha = esperaIframe.Until(d =>
+            iframe = esperaIframe.Until(d =>
             {
                 ct.ThrowIfCancellationRequested();
-                return d.FindElements(By.CssSelector(selectorIframe)).Count > 0;
+                var encontrados = d.FindElements(By.CssSelector(selectorIframe));
+                return encontrados.FirstOrDefault(x => x.GetAttribute("src")?.Contains("/anchor") == true)
+                    ?? encontrados.FirstOrDefault();
             });
         }
         catch (WebDriverTimeoutException)
         {
-            // En caso de que AyA no presente CAPTCHA, el boton de consulta
-            // debe habilitarse normalmente para poder continuar.
+            // El sitio puede no mostrar CAPTCHA en determinadas circunstancias.
             return;
         }
 
-        if (!tieneRecaptcha) return;
+        // Intentar un clic normal de Selenium en la casilla (no resolver retos de Google).
+        // El checkbox #recaptcha-anchor está dentro del iframe del widget.
+        try
+        {
+            driver.SwitchTo().Frame(iframe);
+            var esperaCasilla = new WebDriverWait(driver, TimeSpan.FromSeconds(12))
+            { PollingInterval = TimeSpan.FromMilliseconds(500) };
+            var casilla = esperaCasilla.Until(d =>
+            {
+                ct.ThrowIfCancellationRequested();
+                return d.FindElements(By.Id("recaptcha-anchor"))
+                    .FirstOrDefault(x => x.Displayed && x.Enabled);
+            });
+            if (casilla?.GetAttribute("aria-checked") != "true")
+            {
+                casilla?.Click();
+                log.LogInformation("Se intento marcar automaticamente la casilla de reCAPTCHA de AyA.");
+            }
+        }
+        catch (WebDriverException ex)
+        {
+            // Si el CAPTCHA impide la interacción automatizada, se puede
+            // completar en la ventana visible sin detener inmediatamente la consulta.
+            log.LogInformation(ex, "AyA no acepto el clic automatico; se esperara validacion manual.");
+        }
+        finally
+        {
+            driver.SwitchTo().DefaultContent();
+        }
 
+        // Esperar a que Google confirme la verificación. Si solicita imágenes u
+        // otro desafío, una persona debe completarlo desde el navegador.
         var esperaVerificacion = new WebDriverWait(driver, TimeSpan.FromSeconds(150))
         { PollingInterval = TimeSpan.FromMilliseconds(500) };
         try
@@ -320,21 +350,20 @@ public sealed class ConsultaRecibosSeleniumService(
                 ct.ThrowIfCancellationRequested();
                 try
                 {
-                    // El token se llena al verificar correctamente el CAPTCHA.
                     var token = ((IJavaScriptExecutor)d).ExecuteScript(
                         "return document.querySelector('textarea[name=\"g-recaptcha-response\"]')?.value || '';") as string;
                     if (!string.IsNullOrWhiteSpace(token)) return true;
 
-                    var iframe = d.FindElements(By.CssSelector(selectorIframe))
+                    var frame = d.FindElements(By.CssSelector(selectorIframe))
                         .FirstOrDefault(x => x.GetAttribute("src")?.Contains("/anchor") == true)
                         ?? d.FindElements(By.CssSelector(selectorIframe)).FirstOrDefault();
-                    if (iframe is null) return false;
+                    if (frame is null) return false;
 
-                    d.SwitchTo().Frame(iframe);
+                    d.SwitchTo().Frame(frame);
                     try
                     {
-                        var casilla = d.FindElements(By.Id("recaptcha-anchor")).FirstOrDefault();
-                        return casilla?.GetAttribute("aria-checked") == "true";
+                        var anchor = d.FindElements(By.Id("recaptcha-anchor")).FirstOrDefault();
+                        return anchor?.GetAttribute("aria-checked") == "true";
                     }
                     finally
                     {
@@ -351,8 +380,8 @@ public sealed class ConsultaRecibosSeleniumService(
         catch (WebDriverTimeoutException ex)
         {
             throw new InvalidOperationException(
-                "No se completo la verificacion manual de 'No soy un robot' en AyA. " +
-                "Marque la casilla en el navegador visible del equipo que ejecuta la aplicacion.", ex);
+                "No se completo el reCAPTCHA de AyA. Si Google solicita un desafio adicional, " +
+                "resuelvalo manualmente en el navegador visible.", ex);
         }
     }
 
