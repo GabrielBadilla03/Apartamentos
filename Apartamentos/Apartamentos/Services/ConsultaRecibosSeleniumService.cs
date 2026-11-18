@@ -202,11 +202,16 @@ public sealed class ConsultaRecibosSeleniumService(
             {
                 try
                 {
-                    // WebDriver.Quit() ya ejecuta Dispose(); llamarlos ambos era redundante.
-                    driver.Quit();
+                    driver.Quit(); // Quit ya libera el WebDriver para AyA
                     if (esAya) log.LogInformation("AyA lote: Brave cerrado; proceso ASP.NET continua.");
                 }
                 catch (Exception ex) { log.LogWarning(ex, "No se pudo cerrar navegador del lote"); }
+                if (!esAya)
+                {
+                    // Conservar el cierre previo de ICE, que ya estaba funcionando.
+                    try { driver.Dispose(); }
+                    catch (Exception ex) { log.LogWarning(ex, "No se pudo liberar Chrome del lote"); }
+                }
             }
             if (esAya) log.LogInformation("AyA lote: iniciando limpieza del perfil temporal.");
             try
@@ -346,10 +351,15 @@ public sealed class ConsultaRecibosSeleniumService(
             {
                 try
                 {
-                    driver.Quit(); // Quit ya libera el WebDriver
+                    driver.Quit();
                     if (esAya) log.LogInformation("AyA individual: Brave cerrado.");
                 }
                 catch (Exception ex) { log.LogWarning(ex, "No se pudo cerrar el navegador"); }
+                if (!esAya)
+                {
+                    try { driver.Dispose(); }
+                    catch (Exception ex) { log.LogWarning(ex, "No se pudo liberar ChromeDriver normalmente"); }
+                }
             }
             try
             {
