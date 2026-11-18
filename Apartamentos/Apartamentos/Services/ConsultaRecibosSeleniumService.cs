@@ -381,7 +381,26 @@ public sealed class ConsultaRecibosSeleniumService(
         var consultar = Buscar(driver, 25, ct,
             By.XPath(consultarXpath),
             By.XPath("//app-consultar-factura//button[contains(., 'Consultar')]"));
-        consultar.Click();
+
+        // AyA tiene una barra de navegacion fija que puede tapar el boton
+        // cuando Selenium intenta pulsarlo cerca de la parte superior.
+        // Desplazarlo al centro antes del click evita el overlay.
+        ((IJavaScriptExecutor)driver).ExecuteScript(
+            "arguments[0].scrollIntoView({block: 'center', inline: 'nearest'});", consultar);
+        EsperarConCancelacion(TimeSpan.FromMilliseconds(300), ct);
+        try
+        {
+            consultar.Click();
+        }
+        catch (ElementClickInterceptedException ex)
+        {
+            // Solo el boton de formulario (nunca la casilla reCAPTCHA).
+            // Si un menu fijo sigue interceptando el click fisico,
+            // disparar su click DOM que procesa el formulario Angular.
+            log.LogWarning(ex, "El menu de AyA tapo el boton Consultar para NIS {Nis}; " +
+                "se enviara el click al boton del formulario.", nis);
+            ((IJavaScriptExecutor)driver).ExecuteScript("arguments[0].click();", consultar);
+        }
 
         if (filaAnterior is not null)
         {
